@@ -1,0 +1,18 @@
+[package]
+name = "organ"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4.0"
+env_logger = "0.8.4"
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.3"
+regex = "1"
+rug-fft = "0.1.2"
+
+[dependencies.rug]
+version = "1.11.0"
+features = ["serde"]
