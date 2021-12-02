@@ -26,7 +26,7 @@ fn main() {
     }
     env_logger::init();
     info!("Starting up...");
-    debug!("args are {:?}.", args);
+    debug!("args: {:?}", args);
     let conf = config::load_config().unwrap();
     info!("Reading from {}...", args[3]);
     let base_prf = load_prf(&fs::read_to_string(&args[3]).unwrap());
@@ -36,7 +36,7 @@ fn main() {
         let nid: usize = args[2].parse().unwrap();
         client::main(conf, nid, base_prf, bulk_prf);
     } else if args[1] == "server" {
-        server::main(conf);
+        server::main(conf, base_prf, bulk_prf);
     } else {
         panic!("Unknown node type. Must be client or server.");
     }
