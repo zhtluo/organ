@@ -1,13 +1,14 @@
-use crate::config::{Config, MAX_MESSAGE_SIZE};
+use crate::config::Config;
 use crate::message::{ClientBaseMessage, ClientBulkMessage, Message};
+use crate::net::{read_stream, write_stream};
 use rug::Integer;
-use std::net::UdpSocket;
+use std::net::TcpStream;
 
 fn send_client_base_message(
     c: &Config,
     nid: usize,
     base_prf: &Vec<Integer>,
-    socket: &UdpSocket,
+    socket: &mut TcpStream,
     round: usize,
 ) {
     debug!("p: {}", c.base_params.p);
@@ -37,15 +38,15 @@ fn send_client_base_message(
     .unwrap();
 
     info!("Sending ClientBaseMessage, size = {}...", message.len());
-    socket.send_to(&message, c.server_addr).unwrap();
+    write_stream(socket, &message).unwrap();
     info!("Sent ClientBaseMessage.");
 }
 
 fn send_client_bulk_message(
-    c: &Config,
+    _c: &Config,
     nid: usize,
     bulk_prf: &Vec<Integer>,
-    socket: &UdpSocket,
+    socket: &mut TcpStream,
     round: usize,
 ) {
     let message = bincode::serialize(&Message::ClientBulkMessage(ClientBulkMessage {
@@ -55,26 +56,25 @@ fn send_client_bulk_message(
     }))
     .unwrap();
     info!("Sending ClientBulkMessage, size = {}...", message.len());
-    socket.send_to(&message, c.server_addr).unwrap();
+    write_stream(socket, &message).unwrap();
     info!("Sent ClientBulkMessage.");
 }
 
 pub fn main(c: Config, nid: usize, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
-    let socket = UdpSocket::bind(c.client_addr[nid]).unwrap();
+    let mut socket = TcpStream::connect(c.server_addr).unwrap();
     let mut round: usize = 0;
     loop {
         round += 1;
         info!("Round {}.", round);
-        send_client_base_message(&c, nid, &base_prf, &socket, round);
+        send_client_base_message(&c, nid, &base_prf, &mut socket, round);
 
-        let mut buf = [0; MAX_MESSAGE_SIZE];
-        let (size, _src) = socket.recv_from(&mut buf).unwrap();
-        let message: Message = bincode::deserialize(&buf[..size]).unwrap();
+        let buf = read_stream(&mut socket).unwrap();
+        let message: Message = bincode::deserialize(&buf).unwrap();
         match message {
             Message::ServerBaseMessage(msg) => {
                 info!("Received ServerBaseMessage on round {}.", msg.round);
                 if msg.round == round {
-                    send_client_bulk_message(&c, nid, &bulk_prf, &socket, round);
+                    send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, round);
                 }
             }
             _ => {

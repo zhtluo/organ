@@ -3,8 +3,6 @@ use rug::ops::Pow;
 use rug::Integer;
 use std::net::{AddrParseError, SocketAddr};
 
-pub const MAX_MESSAGE_SIZE: usize = 1024;
-
 #[derive(Clone, Debug)]
 pub struct ProtocolParams {
     pub p: Integer,

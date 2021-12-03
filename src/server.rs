@@ -1,8 +1,12 @@
-use crate::config::{Config, MAX_MESSAGE_SIZE};
+use crate::config::Config;
 use crate::message::{ClientBaseMessage, ClientBulkMessage, Message, ServerBaseMessage};
+use crate::net::{async_read_stream, async_write_stream};
+use async_std::channel::{unbounded, Receiver, Sender};
+use async_std::net::{TcpListener, TcpStream};
+use futures::stream::StreamExt;
+use futures::{join, select, FutureExt};
 use rug::Integer;
 use std::collections::HashMap;
-use std::net::UdpSocket;
 
 fn solve_equation(
     c: &Config,
@@ -31,7 +35,212 @@ fn solve_equation(
     vec![Integer::from(1); c.client_addr.len()]
 }
 
-pub fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
+async fn handle_connection(
+    mut stream: TcpStream,
+    channel_read: Sender<Vec<u8>>,
+    channel_write: Receiver<Vec<u8>>,
+) {
+    loop {
+        select! {
+            read_result = async_read_stream(&mut stream).fuse() => {
+                let msg = read_result.unwrap();
+                channel_read.send(msg).await.unwrap();
+            }
+            write_result = channel_write.recv().fuse() => {
+                let message = write_result.unwrap();
+                async_write_stream(&mut stream, &message).await.unwrap();
+            }
+        }
+    }
+}
+
+async fn listener(
+    c: &Config,
+    reactor_input_channel_send: Sender<Vec<u8>>,
+    boardcast_channels_send: Sender<Sender<Vec<u8>>>,
+) {
+    let listener = TcpListener::bind(c.server_addr).await.unwrap();
+    listener
+        .incoming()
+        .for_each_concurrent(None, |stream| {
+            let boardcast_channels_send = boardcast_channels_send.clone();
+            let reactor_input_channel_send = reactor_input_channel_send.clone();
+            async move {
+                let stream = stream.unwrap();
+                let (channel_send, channel_recv) = unbounded::<Vec<u8>>();
+                boardcast_channels_send.send(channel_send).await.unwrap();
+                handle_connection(stream, reactor_input_channel_send, channel_recv).await;
+            }
+        })
+        .await;
+}
+
+async fn sender(
+    boardcast_channels_recv: Receiver<Sender<Vec<u8>>>,
+    reactor_output_channel_recv: Receiver<Vec<u8>>,
+) {
+    let mut channels = Vec::<Sender<Vec<u8>>>::new();
+    loop {
+        select! {
+            new_channel = boardcast_channels_recv.recv().fuse() => {
+                let new_channel = new_channel.unwrap();
+                channels.push(new_channel);
+            }
+            new_message = reactor_output_channel_recv.recv().fuse() => {
+                let new_message = new_message.unwrap();
+                for chan in channels.iter() {
+                    chan.send(new_message.clone()).await.unwrap();
+                }
+            }
+        }
+    }
+}
+
+pub async fn main(c: Config, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
+    let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
+    let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
+    let (reactor_output_channel_send, reactor_output_channel_recv) = unbounded::<Vec<u8>>();
+    join!(
+        listener(&c, reactor_input_channel_send, boardcast_channels_send),
+        sender(boardcast_channels_recv, reactor_output_channel_recv),
+        reactor(
+            &c,
+            base_prf,
+            bulk_prf,
+            reactor_input_channel_recv,
+            reactor_output_channel_send
+        ),
+    );
+}
+
+pub async fn reactor(
+    c: &Config,
+    base_prf: Vec<Integer>,
+    bulk_prf: Vec<Integer>,
+    reactor_input_channel: Receiver<Vec<u8>>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let (base_input_channel_send, base_input_channel_recv) = unbounded::<ClientBaseMessage>();
+    let (bulk_input_channel_send, bulk_input_channel_recv) = unbounded::<ClientBulkMessage>();
+    let msg_dist = || async move {
+        loop {
+            let message = &reactor_input_channel.recv().await.unwrap();
+            info!("Got message of size {}.", message.len());
+            let message: Message = bincode::deserialize(&message).unwrap();
+            match message {
+                Message::ClientBaseMessage(msg) => {
+                    base_input_channel_send.send(msg).await.unwrap();
+                }
+                Message::ClientBulkMessage(msg) => {
+                    bulk_input_channel_send.send(msg).await.unwrap();
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
+                }
+            }
+        }
+    };
+    join!(
+        msg_dist(),
+        reactor_base_round(
+            c,
+            base_prf,
+            base_input_channel_recv,
+            reactor_output_channel.clone()
+        ),
+        reactor_bulk_round(
+            c,
+            bulk_prf,
+            bulk_input_channel_recv,
+            reactor_output_channel.clone()
+        )
+    );
+}
+
+pub async fn reactor_base_round(
+    c: &Config,
+    base_prf: Vec<Integer>,
+    base_input_channel: Receiver<ClientBaseMessage>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBaseMessage>>::new();
+    let mut round: usize = 0;
+    loop {
+        round += 1;
+        info!("Base round {}.", round);
+        if base_protocol_buffer.get(&round).is_none() {
+            base_protocol_buffer.insert(round, HashMap::new());
+        }
+        loop {
+            let msg = base_input_channel.recv().await.unwrap();
+            info!(
+                "Received ClientBaseMessage from {} on round {}.",
+                msg.nid, msg.round
+            );
+            if base_protocol_buffer.get(&msg.round).is_none() {
+                base_protocol_buffer.insert(msg.round, HashMap::new());
+            }
+            base_protocol_buffer
+                .get_mut(&msg.round)
+                .unwrap()
+                .insert(msg.nid, msg);
+            if base_protocol_buffer.get(&round).unwrap().len() == c.client_addr.len() {
+                info!("All base messages received. Computing...");
+                let perm =
+                    solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
+                let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
+                    round: round,
+                    perm: perm,
+                }))
+                .unwrap();
+                info!("Sending ServerBaseMessage, size = {}...", message.len());
+                reactor_output_channel.send(message).await.unwrap();
+                info!("Sent ServerBaseMessage.");
+                base_protocol_buffer.remove(&round);
+                break;
+            }
+        }
+    }
+}
+
+pub async fn reactor_bulk_round(
+    c: &Config,
+    _bulk_prf: Vec<Integer>,
+    bulk_input_channel: Receiver<ClientBulkMessage>,
+    _reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let mut bulk_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBulkMessage>>::new();
+    let mut round: usize = 0;
+    loop {
+        round += 1;
+        info!("Bulk round {}.", round);
+        if bulk_protocol_buffer.get(&round).is_none() {
+            bulk_protocol_buffer.insert(round, HashMap::new());
+        }
+        loop {
+            let msg = bulk_input_channel.recv().await.unwrap();
+            info!(
+                "Received ClientBulkMessage from {} on round {}.",
+                msg.nid, msg.round
+            );
+            if bulk_protocol_buffer.get(&msg.round).is_none() {
+                bulk_protocol_buffer.insert(msg.round, HashMap::new());
+            }
+            bulk_protocol_buffer
+                .get_mut(&msg.round)
+                .unwrap()
+                .insert(msg.nid, msg);
+            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_addr.len() {
+                info!("All bulk messages received. Computing...");
+                bulk_protocol_buffer.remove(&round);
+                break;
+            }
+        }
+    }
+}
+
+/*
+pub async fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
     let socket = UdpSocket::bind(c.server_addr).unwrap();
     let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBaseMessage>>::new();
     let mut bulk_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBulkMessage>>::new();
@@ -107,3 +316,4 @@ pub fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
         }
     }
 }
+*/

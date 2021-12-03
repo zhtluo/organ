@@ -8,6 +8,7 @@ use std::fs;
 mod client;
 mod config;
 mod message;
+mod net;
 mod server;
 
 fn load_prf(input: &str) -> Vec<Integer> {
@@ -17,8 +18,8 @@ fn load_prf(input: &str) -> Vec<Integer> {
     }
     prf
 }
-
-fn main() {
+#[async_std::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 4 {
         println!(r"Usage: organ (client|server) <id> <base_prf_file> <bulk_prf_file>");
@@ -36,7 +37,7 @@ fn main() {
         let nid: usize = args[2].parse().unwrap();
         client::main(conf, nid, base_prf, bulk_prf);
     } else if args[1] == "server" {
-        server::main(conf, base_prf, bulk_prf);
+        server::main(conf, base_prf, bulk_prf).await;
     } else {
         panic!("Unknown node type. Must be client or server.");
     }
