@@ -7,6 +7,7 @@ use std::env;
 use std::fs;
 mod client;
 mod config;
+mod flint;
 mod message;
 mod net;
 mod server;

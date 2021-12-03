@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::flint::solve_impl;
 use crate::message::{ClientBaseMessage, ClientBulkMessage, Message, ServerBaseMessage};
 use crate::net::{async_read_stream, async_write_stream};
 use async_std::channel::{unbounded, Receiver, Sender};
@@ -31,8 +32,7 @@ fn solve_equation(
     }
     debug!("final_equations: {:?}", final_equations);
 
-    // Use some dummy values for now.
-    vec![Integer::from(1); c.client_addr.len()]
+    solve_impl(&c.base_params.p, &final_equations)
 }
 
 async fn handle_connection(
