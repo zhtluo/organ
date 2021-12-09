@@ -61,25 +61,30 @@ fn send_client_bulk_message(
 }
 
 pub fn main(c: Config, nid: usize, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
+    debug!("Connecting to {:?}...", c.server_addr);
     let mut socket = TcpStream::connect(c.server_addr).unwrap();
     let mut round: usize = 0;
     loop {
-        round += 1;
-        info!("Round {}.", round);
-        send_client_base_message(&c, nid, &base_prf, &mut socket, round);
+        if round < c.round {
+            round += 1;
+            info!("Round {}.", round);
+            send_client_base_message(&c, nid, &base_prf, &mut socket, round);
 
-        let buf = read_stream(&mut socket).unwrap();
-        let message: Message = bincode::deserialize(&buf).unwrap();
-        match message {
-            Message::ServerBaseMessage(msg) => {
-                info!("Received ServerBaseMessage on round {}.", msg.round);
-                if msg.round == round {
-                    send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, round);
+            let buf = read_stream(&mut socket).unwrap();
+            let message: Message = bincode::deserialize(&buf).unwrap();
+            match message {
+                Message::ServerBaseMessage(msg) => {
+                    info!("Received ServerBaseMessage on round {}.", msg.round);
+                    if msg.round == round {
+                        send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, round);
+                    }
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
                 }
             }
-            _ => {
-                error!("Unknown message {:?}.", message);
-            }
+        } else {
+            return;
         }
     }
 }

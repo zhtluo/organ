@@ -1,6 +1,7 @@
 use rug::integer::ParseIntegerError;
 use rug::ops::Pow;
 use rug::Integer;
+use serde::{Deserialize, Serialize};
 use std::net::{AddrParseError, SocketAddr};
 
 #[derive(Clone, Debug)]
@@ -24,12 +25,15 @@ pub struct Config {
     pub client_addr: Vec<SocketAddr>,
     pub base_params: ProtocolParams,
     pub bulk_params: ProtocolParams,
+    pub round: usize,
 }
 
 #[derive(Debug)]
 pub enum ConfigError {
     AddrParseError(AddrParseError),
     ParseIntegerError(ParseIntegerError),
+    IOError(std::io::Error),
+    JsonError(serde_json::Error),
 }
 
 impl From<AddrParseError> for ConfigError {
@@ -44,10 +48,30 @@ impl From<ParseIntegerError> for ConfigError {
     }
 }
 
-pub fn load_config() -> Result<Config, ConfigError> {
+impl From<std::io::Error> for ConfigError {
+    fn from(e: std::io::Error) -> Self {
+        ConfigError::IOError(e)
+    }
+}
+
+impl From<serde_json::Error> for ConfigError {
+    fn from(e: serde_json::Error) -> Self {
+        ConfigError::JsonError(e)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JsonConfig {
+    pub server_addr: SocketAddr,
+    pub client_addr: Vec<SocketAddr>,
+    pub round: usize,
+}
+
+pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
+    let cf: JsonConfig = serde_json::from_str(&std::fs::read_to_string(filename)?)?;
     Ok(Config {
-        server_addr: "127.0.0.1:8001".parse()?,
-        client_addr: vec!["127.0.0.1:9001".parse()?, "127.0.0.1:9002".parse()?],
+        server_addr: cf.server_addr,
+        client_addr: cf.client_addr,
         base_params: ProtocolParams {
             p: Integer::from(2).pow(32) - 5,
             // order of secp112r1
@@ -58,11 +82,15 @@ pub fn load_config() -> Result<Config, ConfigError> {
         },
         bulk_params: ProtocolParams {
             p: Integer::from(2).pow(226) - 5,
-            // order of secp112r1
-            q: Integer::from_str_radix("db7c2abf62e35e7628dfac6561c5", 16)?,
+            // order of secp256k1
+            q: Integer::from_str_radix(
+                "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+                16,
+            )?,
             ring_v: (Integer::from(7) * (Integer::from(2).pow(290))) + 1,
             vector_len: 8192,
             bits: 226,
         },
+        round: cf.round,
     })
 }

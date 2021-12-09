@@ -19,21 +19,23 @@ fn load_prf(input: &str) -> Vec<Integer> {
     }
     prf
 }
+
 #[async_std::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 4 {
-        println!(r"Usage: organ (client|server) <id> <base_prf_file> <bulk_prf_file>");
+    if args.len() < 5 {
+        println!(r"Usage: organ (client|server) <id> <config_file> <base_prf_file> <bulk_prf_file>");
         return;
     }
     env_logger::init();
     info!("Starting up...");
     debug!("args: {:?}", args);
-    let conf = config::load_config().unwrap();
     info!("Reading from {}...", args[3]);
-    let base_prf = load_prf(&fs::read_to_string(&args[3]).unwrap());
+    let conf = config::load_config(&args[3]).unwrap();
     info!("Reading from {}...", args[4]);
-    let bulk_prf = load_prf(&fs::read_to_string(&args[4]).unwrap());
+    let base_prf = load_prf(&fs::read_to_string(&args[4]).unwrap());
+    info!("Reading from {}...", args[5]);
+    let bulk_prf = load_prf(&fs::read_to_string(&args[5]).unwrap());
     if args[1] == "client" {
         let nid: usize = args[2].parse().unwrap();
         client::main(conf, nid, base_prf, bulk_prf);
