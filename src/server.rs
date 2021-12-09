@@ -14,15 +14,15 @@ fn solve_equation(
     base_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBaseMessage>,
 ) -> Vec<Integer> {
-    let mut relay_messages = Vec::<Integer>::with_capacity(messages.len());
-    for (_nid, msg) in messages.iter() {
+    let mut relay_messages = Vec::<Integer>::with_capacity(c.base_params.vector_len);
+    for i in 0..c.client_size {
         let mut relay_msg_of_slot = Integer::from(0);
-        for smsg in msg.slot_messages.iter() {
-            relay_msg_of_slot = (relay_msg_of_slot + smsg) % &c.base_params.q;
+        for (_nid, msg) in messages.iter() {
+            relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.base_params.q;
         }
         relay_messages.push(relay_msg_of_slot);
     }
-    debug!("relay_messages: {:?}", relay_messages);
+    debug!("base_relay_messages: {:?}", relay_messages);
 
     let mut final_equations = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(base_prf.iter()) {
@@ -32,7 +32,36 @@ fn solve_equation(
     }
     debug!("final_equations: {:?}", final_equations);
 
-    solve_impl(&c.base_params.p, &final_equations)
+    let solve = solve_impl(&c.base_params.p, &final_equations);
+    debug!("solve: {:?}", solve);
+
+    solve
+}
+
+fn compute_message(
+    c: &Config,
+    bulk_prf: &Vec<Integer>,
+    messages: &HashMap<usize, ClientBulkMessage>,
+) -> Vec<Integer> {
+    let mut relay_messages = Vec::<Integer>::with_capacity(c.bulk_params.vector_len);
+    for i in 0..c.bulk_params.vector_len {
+        let mut relay_msg_of_slot = Integer::from(0);
+        for (_nid, msg) in messages.iter() {
+            relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.bulk_params.q;
+        }
+        relay_messages.push(relay_msg_of_slot);
+    }
+    debug!("bulk_relay_messages: {:?}", relay_messages);
+
+    let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
+    for (rmsg, prf) in relay_messages.iter().zip(bulk_prf.iter()) {
+        let val = Integer::from(rmsg - prf) % &c.bulk_params.q;
+        let val_in_grp = val / 1000 % &c.bulk_params.p;
+        final_values.push(val_in_grp);
+    }
+    debug!("final_values: {:?}", final_values);
+
+    final_values
 }
 
 async fn handle_connection(
@@ -184,7 +213,7 @@ pub async fn reactor_base_round(
                 .get_mut(&msg.round)
                 .unwrap()
                 .insert(msg.nid, msg);
-            if base_protocol_buffer.get(&round).unwrap().len() == c.client_addr.len() {
+            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All base messages received. Computing...");
                 let perm =
                     solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
@@ -205,7 +234,7 @@ pub async fn reactor_base_round(
 
 pub async fn reactor_bulk_round(
     c: &Config,
-    _bulk_prf: Vec<Integer>,
+    bulk_prf: Vec<Integer>,
     bulk_input_channel: Receiver<ClientBulkMessage>,
     _reactor_output_channel: Sender<Vec<u8>>,
 ) {
@@ -230,8 +259,9 @@ pub async fn reactor_bulk_round(
                 .get_mut(&msg.round)
                 .unwrap()
                 .insert(msg.nid, msg);
-            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_addr.len() {
+            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All bulk messages received. Computing...");
+                compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap());
                 bulk_protocol_buffer.remove(&round);
                 break;
             }
@@ -291,7 +321,7 @@ pub async fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
                 }
             }
 
-            if base_protocol_buffer.get(&round).unwrap().len() == c.client_addr.len() {
+            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All base messages received. Computing...");
                 let perm =
                     solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
@@ -308,7 +338,7 @@ pub async fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
                 base_protocol_buffer.remove(&round);
             }
 
-            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_addr.len() {
+            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All bulk messages received. Computing...");
                 bulk_protocol_buffer.remove(&round);
                 break;

@@ -13,16 +13,16 @@ fn send_client_base_message(
 ) {
     debug!("p: {}", c.base_params.p);
     debug!("q: {}", c.base_params.q);
-    debug!("num_of_slots: {}", c.client_addr.len());
+    debug!("num_of_slots: {}", c.client_size);
     debug!(
         "evaluations: [{}, {}, {}, ...]",
         base_prf[0], base_prf[1], base_prf[2]
     );
 
     let mut slot_msg = Integer::from(1);
-    let mut slot_messages = Vec::<Integer>::with_capacity(c.client_addr.len());
+    let mut slot_messages = Vec::<Integer>::with_capacity(c.client_size);
     let message_ele = Integer::from(nid + 1);
-    for i in 0..c.client_addr.len() {
+    for i in 0..c.client_size {
         slot_msg = slot_msg * &message_ele;
         slot_msg = slot_msg % &c.base_params.p;
         let msg_to_append = Integer::from(&base_prf[i] + 1000 * &slot_msg) % &c.base_params.q;
@@ -43,16 +43,24 @@ fn send_client_base_message(
 }
 
 fn send_client_bulk_message(
-    _c: &Config,
+    c: &Config,
     nid: usize,
     bulk_prf: &Vec<Integer>,
     socket: &mut TcpStream,
     round: usize,
 ) {
+    let slots_per_client = c.bulk_params.vector_len / c.client_size;
+    let slot_index_start = nid * slots_per_client;
+    let slot_index_end = (nid + 1) * slots_per_client;
+    let mut prf_evaluations = bulk_prf.clone();
+    let message_ele = nid + 1;
+    for i in slot_index_start..slot_index_end {
+        prf_evaluations[i] = (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
+    }
     let message = bincode::serialize(&Message::ClientBulkMessage(ClientBulkMessage {
         round: round,
         nid: nid,
-        slot_messages: bulk_prf.clone(),
+        slot_messages: prf_evaluations,
     }))
     .unwrap();
     info!("Sending ClientBulkMessage, size = {}...", message.len());

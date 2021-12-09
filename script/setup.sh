@@ -14,16 +14,9 @@ echo '{' > $2/config.json
 echo -n '"server_addr": "' >> $2/config.json
 echo -n ${PIPS[0]} >> $2/config.json
 echo ':7000",' >> $2/config.json
-echo '"client_addr": [' >> $2/config.json
-for ((i = 1; i <= $(expr ${#PIPS[@]} - 2); i++))
-do
-    echo -n '"' >> $2/config.json
-    echo -n ${PIPS[$i]} >> $2/config.json
-    echo ':8000",' >> $2/config.json
-done
-echo -n '"' >> $2/config.json
-echo -n ${PIPS[$(expr ${#PIPS[@]} - 1)]} >> $2/config.json
-echo ':8000"],' >> $2/config.json
+echo -n '"client_size": ' >> $2/config.json
+echo -n $(expr ${#PIPS[@]} - 1) >> $2/config.json
+echo ',' >> $2/config.json
 echo '"round": 100' >> $2/config.json
 echo "}" >> $2/config.json
 

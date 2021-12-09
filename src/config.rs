@@ -22,7 +22,7 @@ pub struct SlotParams {
 #[derive(Clone, Debug)]
 pub struct Config {
     pub server_addr: SocketAddr,
-    pub client_addr: Vec<SocketAddr>,
+    pub client_size: usize,
     pub base_params: ProtocolParams,
     pub bulk_params: ProtocolParams,
     pub round: usize,
@@ -63,7 +63,7 @@ impl From<serde_json::Error> for ConfigError {
 #[derive(Serialize, Deserialize, Debug)]
 struct JsonConfig {
     pub server_addr: SocketAddr,
-    pub client_addr: Vec<SocketAddr>,
+    pub client_size: usize,
     pub round: usize,
 }
 
@@ -71,7 +71,7 @@ pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
     let cf: JsonConfig = serde_json::from_str(&std::fs::read_to_string(filename)?)?;
     Ok(Config {
         server_addr: cf.server_addr,
-        client_addr: cf.client_addr,
+        client_size: cf.client_size,
         base_params: ProtocolParams {
             p: Integer::from(2).pow(32) - 5,
             // order of secp112r1
