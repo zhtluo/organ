@@ -26,8 +26,8 @@ fn solve_equation(
 
     let mut final_equations = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(base_prf.iter()) {
-        let val = (Integer::from(rmsg - prf) / 1000) % &c.base_params.q;
-        let val_in_grp = val % &c.base_params.p;
+        let val = (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
+        let val_in_grp = val / 1000 % &c.base_params.p;
         final_equations.push(val_in_grp);
     }
     debug!("final_equations: {:?}", final_equations);
@@ -55,7 +55,7 @@ fn compute_message(
 
     let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(bulk_prf.iter()) {
-        let val = Integer::from(rmsg - prf) % &c.bulk_params.q;
+        let val = (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q;
         let val_in_grp = val / 1000 % &c.bulk_params.p;
         final_values.push(val_in_grp);
     }
