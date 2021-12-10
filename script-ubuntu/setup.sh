@@ -4,7 +4,7 @@ while IFS= read -r line; do
   IPS+=($line)
 done < $1
 
-bash ./script/get_pvt_ip.sh $1 > ./log/pvt.txt
+bash ./script-ubuntu/get_pvt_ip.sh $1 > ./log/pvt.txt
 
 while IFS= read -r line; do
   PIPS+=($line)
@@ -20,8 +20,10 @@ echo ',' >> $2/config.json
 echo '"round": 110' >> $2/config.json
 echo "}" >> $2/config.json
 
-bash ./script/setup_server.sh ${IPS[0]} $2 
+bash ./script-ubuntu/setup_server.sh ${IPS[0]} $2 &
 for ((i = 1; i <= $(expr ${#IPS[@]} - 1); i++))
 do
-    bash ./script/setup_client.sh ${IPS[$i]} $2 $(expr $i - 1) 
+    bash ./script-ubuntu/setup_client.sh ${IPS[$i]} $2 $(expr $i - 1) &
 done
+
+wait
