@@ -5,7 +5,7 @@ use crate::net::{async_read_stream, async_write_stream};
 use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use futures::stream::StreamExt;
-use futures::{join, select, FutureExt};
+use futures::{future::join_all, join, select, FutureExt};
 use rug::Integer;
 use std::collections::HashMap;
 
@@ -26,7 +26,8 @@ fn solve_equation(
 
     let mut final_equations = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(base_prf.iter()) {
-        let val = (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
+        let val =
+            (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
         let val_in_grp = val / 1000 % &c.base_params.p;
         final_equations.push(val_in_grp);
     }
@@ -55,7 +56,8 @@ fn compute_message(
 
     let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(bulk_prf.iter()) {
-        let val = (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q;
+        let val =
+            (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q;
         let val_in_grp = val / 1000 % &c.bulk_params.p;
         final_values.push(val_in_grp);
     }
@@ -192,46 +194,142 @@ pub async fn reactor_base_round(
     base_input_channel: Receiver<ClientBaseMessage>,
     reactor_output_channel: Sender<Vec<u8>>,
 ) {
-    let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBaseMessage>>::new();
-    let mut round: usize = 0;
+    let mut chan = Vec::with_capacity(c.round);
+    for _ in 0..c.round {
+        chan.push(unbounded::<ClientBaseMessage>());
+    }
+    let mut futures = Vec::with_capacity(c.round);
+    for i in 0..c.round {
+        futures.push(reactor_base_one_round(
+            c,
+            &base_prf,
+            &chan[i].1,
+            &reactor_output_channel,
+            i,
+        ));
+    }
+    join!(
+        join_all(futures),
+        reactor_base_round_listener(&base_input_channel, &chan)
+    );
+}
+
+pub async fn reactor_base_round_listener(
+    base_input_channel: &Receiver<ClientBaseMessage>,
+    base_output_channel: &Vec<(Sender<ClientBaseMessage>, Receiver<ClientBaseMessage>)>,
+) {
     loop {
-        round += 1;
-        info!("Base round {}.", round);
-        if base_protocol_buffer.get(&round).is_none() {
-            base_protocol_buffer.insert(round, HashMap::new());
-        }
-        loop {
-            let msg = base_input_channel.recv().await.unwrap();
-            info!(
-                "Received ClientBaseMessage from {} on round {}.",
-                msg.nid, msg.round
-            );
-            if base_protocol_buffer.get(&msg.round).is_none() {
-                base_protocol_buffer.insert(msg.round, HashMap::new());
-            }
-            base_protocol_buffer
-                .get_mut(&msg.round)
-                .unwrap()
-                .insert(msg.nid, msg);
-            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
-                info!("All base messages received. Computing...");
-                let perm =
-                    solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
-                let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
-                    round: round,
-                    perm: perm,
-                }))
-                .unwrap();
-                info!("Sending ServerBaseMessage, size = {}...", message.len());
-                reactor_output_channel.send(message).await.unwrap();
-                info!("Sent ServerBaseMessage.");
-                base_protocol_buffer.remove(&round);
-                break;
-            }
+        let msg = base_input_channel.recv().await.unwrap();
+        info!(
+            "Received ClientBaseMessage from {} on round {}.",
+            msg.nid, msg.round
+        );
+        base_output_channel[msg.round].0.send(msg).await.unwrap();
+    }
+}
+
+pub async fn reactor_base_one_round(
+    c: &Config,
+    base_prf: &Vec<Integer>,
+    base_input_channel: &Receiver<ClientBaseMessage>,
+    reactor_output_channel: &Sender<Vec<u8>>,
+    round: usize,
+) {
+    let mut base_protocol_buffer = HashMap::<usize, ClientBaseMessage>::new();
+    loop {
+        let msg = base_input_channel.recv().await.unwrap();
+        info!(
+            "!!!!{} {} {} {}",
+            msg.nid,
+            msg.round,
+            round,
+            base_protocol_buffer.len()
+        );
+        base_protocol_buffer.insert(msg.nid, msg);
+        info!("!!!!{} {}", base_protocol_buffer.len(), c.client_size);
+        if base_protocol_buffer.len() == c.client_size {
+            info!("All base messages received. Computing...");
+            let perm = solve_equation(&c, &base_prf, &base_protocol_buffer);
+            let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
+                round: round,
+                perm: perm,
+            }))
+            .unwrap();
+            info!("Sending ServerBaseMessage, size = {}...", message.len());
+            reactor_output_channel.send(message).await.unwrap();
+            info!("Sent ServerBaseMessage.");
+            break;
         }
     }
 }
 
+pub async fn reactor_bulk_round(
+    c: &Config,
+    bulk_prf: Vec<Integer>,
+    bulk_input_channel: Receiver<ClientBulkMessage>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let mut chan = Vec::with_capacity(c.round);
+    for _ in 0..c.round {
+        chan.push(unbounded::<ClientBulkMessage>());
+    }
+    let mut futures = Vec::with_capacity(c.round);
+    for i in 0..c.round {
+        futures.push(reactor_bulk_one_round(
+            c,
+            &bulk_prf,
+            &chan[i].1,
+            &reactor_output_channel,
+            i,
+        ));
+    }
+    join!(
+        async {
+            join_all(futures).await;
+            panic!("Time up.");
+        },
+        reactor_bulk_round_listener(&bulk_input_channel, &chan)
+    );
+}
+
+pub async fn reactor_bulk_round_listener(
+    bulk_input_channel: &Receiver<ClientBulkMessage>,
+    bulk_output_channel: &Vec<(Sender<ClientBulkMessage>, Receiver<ClientBulkMessage>)>,
+) {
+    loop {
+        let msg = bulk_input_channel.recv().await.unwrap();
+        info!(
+            "Received ClientBulkMessage from {} on round {}.",
+            msg.nid, msg.round
+        );
+        bulk_output_channel[msg.round].0.send(msg).await.unwrap();
+    }
+}
+
+pub async fn reactor_bulk_one_round(
+    c: &Config,
+    bulk_prf: &Vec<Integer>,
+    bulk_input_channel: &Receiver<ClientBulkMessage>,
+    reactor_output_channel: &Sender<Vec<u8>>,
+    _round: usize,
+) {
+    let mut bulk_protocol_buffer = HashMap::<usize, ClientBulkMessage>::new();
+    loop {
+        let msg = bulk_input_channel.recv().await.unwrap();
+        bulk_protocol_buffer.insert(msg.nid, msg);
+        if bulk_protocol_buffer.len() == c.client_size {
+            info!("All bulk messages received. Computing...");
+            compute_message(c, &bulk_prf, &bulk_protocol_buffer);
+            let message = bincode::serialize(&Message::ServerBulkMessage).unwrap();
+            info!("Sending ServerBulkMessage, size = {}...", message.len());
+            reactor_output_channel.send(message).await.unwrap();
+            info!("Sent ServerBulkMessage.");
+            break;
+        }
+    }
+}
+
+/*
 pub async fn reactor_bulk_round(
     c: &Config,
     bulk_prf: Vec<Integer>,
@@ -243,6 +341,9 @@ pub async fn reactor_bulk_round(
     loop {
         round += 1;
         info!("Bulk round {}.", round);
+        if round > c.round {
+            panic!("Time up.")
+        }
         if bulk_protocol_buffer.get(&round).is_none() {
             bulk_protocol_buffer.insert(round, HashMap::new());
         }
@@ -268,6 +369,7 @@ pub async fn reactor_bulk_round(
         }
     }
 }
+*/
 
 /*
 pub async fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {

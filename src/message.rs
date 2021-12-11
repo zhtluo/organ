@@ -27,4 +27,5 @@ pub enum Message {
     ClientBaseMessage(ClientBaseMessage),
     ServerBaseMessage(ServerBaseMessage),
     ClientBulkMessage(ClientBulkMessage),
+    ServerBulkMessage,
 }
