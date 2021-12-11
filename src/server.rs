@@ -238,15 +238,7 @@ pub async fn reactor_base_one_round(
     let mut base_protocol_buffer = HashMap::<usize, ClientBaseMessage>::new();
     loop {
         let msg = base_input_channel.recv().await.unwrap();
-        info!(
-            "!!!!{} {} {} {}",
-            msg.nid,
-            msg.round,
-            round,
-            base_protocol_buffer.len()
-        );
         base_protocol_buffer.insert(msg.nid, msg);
-        info!("!!!!{} {}", base_protocol_buffer.len(), c.client_size);
         if base_protocol_buffer.len() == c.client_size {
             info!("All base messages received. Computing...");
             let perm = solve_equation(&c, &base_prf, &base_protocol_buffer);
