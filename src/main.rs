@@ -24,10 +24,14 @@ fn load_prf(input: &str) -> Vec<Integer> {
 async fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 5 {
-        println!(r"Usage: organ (client|server) <id> <config_file> <base_prf_file> <bulk_prf_file>");
+        println!(
+            r"Usage: organ (client|server) <id> <config_file> <base_prf_file> <bulk_prf_file>"
+        );
         return;
     }
-    env_logger::init();
+    env_logger::builder()
+        .format_timestamp(Some(env_logger::TimestampPrecision::Millis))
+        .init();
     info!("Starting up...");
     debug!("args: {:?}", args);
     info!("Reading from {}...", args[3]);
