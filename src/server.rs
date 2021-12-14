@@ -285,12 +285,12 @@ pub async fn reactor_bulk_round(
                     a: std::iter::repeat_with(|| {
                         Integer::from(c.base_params.p.random_below_ref(&mut rand))
                     })
-                    .take(c.bulk_params.vector_len * c.client_size)
+                    .take((c.bulk_params.vector_len * c.client_size).next_power_of_two())
                     .collect(),
                     b: std::iter::repeat_with(|| {
                         Integer::from(c.base_params.p.random_below_ref(&mut rand))
                     })
-                    .take(c.bulk_params.vector_len * c.client_size)
+                    .take((c.bulk_params.vector_len * c.client_size).next_power_of_two())
                     .collect(),
                     p: c.bulk_params.p.clone(),
                     w: c.bulk_params.ring_v.clone(),
