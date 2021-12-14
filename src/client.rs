@@ -49,10 +49,11 @@ fn send_client_bulk_message(
     socket: &mut TcpStream,
     round: usize,
 ) {
-    let slots_per_client = c.bulk_params.vector_len / c.client_size;
+    let slots_per_client = c.bulk_params.vector_len;
     let slot_index_start = nid * slots_per_client;
     let slot_index_end = (nid + 1) * slots_per_client;
     let mut prf_evaluations = bulk_prf.clone();
+    prf_evaluations.resize(slots_per_client * c.client_size, Integer::from(0));
     let message_ele = nid + 1;
     for i in slot_index_start..slot_index_end {
         prf_evaluations[i] = (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;

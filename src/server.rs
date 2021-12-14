@@ -43,8 +43,8 @@ fn compute_message(
     bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
-    let mut relay_messages = Vec::<Integer>::with_capacity(c.bulk_params.vector_len);
-    for i in 0..c.bulk_params.vector_len {
+    let mut relay_messages = Vec::<Integer>::with_capacity(c.bulk_params.vector_len * c.client_size);
+    for i in 0..c.bulk_params.vector_len * c.client_size {
         let mut relay_msg_of_slot = Integer::from(0);
         for (_nid, msg) in messages.iter() {
             relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.bulk_params.q;
