@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::message::{ClientBaseMessage, ClientBulkMessage, Message};
+use crate::message::{ClientBaseMessage, ClientBulkMessage, ClientPrifiMessage, Message};
 use crate::net::{read_stream, write_stream};
 use rug::Integer;
 use std::net::TcpStream;
@@ -113,6 +113,58 @@ pub fn main(c: Config, nid: usize, base_prf: Vec<Integer>, bulk_prf: Vec<Integer
                     if msg.round == round {
                         send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, round);
                     }
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
+                }
+            }
+        } else {
+            return;
+        }
+    }
+}
+
+pub fn main_prifi(c: Config, nid: usize, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
+    debug!("Connecting to {:?}...", c.server_addr);
+    let mut socket = TcpStream::connect(c.server_addr).unwrap();
+    let mut round: usize = 0;
+    loop {
+        if round < c.round {
+            round += 1;
+            info!("Round {}.", round);
+            let nbits: usize = 1024 * 8;
+            let nguards: usize = 10;
+            let mut rand = rug::rand::RandState::new();
+            let prgs: Vec<Integer> = std::iter::repeat_with(|| {
+                Integer::from(Integer::random_bits(nbits as u32, &mut rand))
+            })
+            .take(nguards)
+            .collect();
+            let message = Integer::from(Integer::random_bits(nbits as u32, &mut rand));
+            let slot_messages: Vec<Integer> = std::iter::repeat_with(|| message.clone())
+                .take(c.client_size)
+                .collect();
+            let keys = vec![(Integer::from_str_radix("c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c5ef", 16).unwrap(), Integer::from_str_radix("c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c5ef", 16).unwrap()); c.client_size];
+            let mut message_enc = message ^ &prgs[0];
+            for i in 2..nguards {
+                message_enc ^= &prgs[i];
+            }
+            let message = bincode::serialize(&Message::ClientPrifiMessage(ClientPrifiMessage {
+                round: round,
+                nid: nid,
+                slot_messages: slot_messages,
+                keys: keys,
+                cipher: message_enc,
+            }))
+            .unwrap();
+            info!("Sending ClientPrifiMessage, size = {}...", message.len());
+            write_stream(&mut socket, &message).unwrap();
+            info!("Sent ClientPrifiMessage.");
+            let buf = read_stream(&mut socket).unwrap();
+            let message: Message = bincode::deserialize(&buf).unwrap();
+            match message {
+                Message::Ok => {
+                    info!("Received Server Ok Message.");
                 }
                 _ => {
                     error!("Unknown message {:?}.", message);

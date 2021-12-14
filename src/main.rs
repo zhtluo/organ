@@ -43,9 +43,9 @@ async fn main() {
     let bulk_prf = load_prf(&fs::read_to_string(&args[5]).unwrap());
     if args[1] == "client" {
         let nid: usize = args[2].parse().unwrap();
-        client::main(conf, nid, base_prf, bulk_prf);
+        client::main_prifi(conf, nid, base_prf, bulk_prf);
     } else if args[1] == "server" {
-        server::main(conf, base_prf, bulk_prf).await;
+        server::main_prifi(conf, base_prf, bulk_prf).await;
     } else {
         panic!("Unknown node type. Must be client or server.");
     }

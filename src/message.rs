@@ -23,8 +23,19 @@ pub struct ClientBulkMessage {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct ClientPrifiMessage {
+    pub round: usize,
+    pub nid: usize,
+    pub slot_messages: Vec<Integer>,
+    pub cipher: Integer,
+    pub keys: Vec<(Integer, Integer)>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Message {
     ClientBaseMessage(ClientBaseMessage),
     ServerBaseMessage(ServerBaseMessage),
     ClientBulkMessage(ClientBulkMessage),
+    ClientPrifiMessage(ClientPrifiMessage),
+    Ok,
 }

@@ -1,6 +1,8 @@
 use crate::config::Config;
 use crate::flint::solve_impl;
-use crate::message::{ClientBaseMessage, ClientBulkMessage, Message, ServerBaseMessage};
+use crate::message::{
+    ClientBaseMessage, ClientBulkMessage, ClientPrifiMessage, Message, ServerBaseMessage,
+};
 use crate::net::{async_read_stream, async_write_stream};
 use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
@@ -143,6 +145,123 @@ pub async fn main(c: Config, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
             reactor_output_channel_send
         ),
     );
+}
+
+pub async fn main_prifi(c: Config, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
+    let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
+    let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
+    let (reactor_output_channel_send, reactor_output_channel_recv) = unbounded::<Vec<u8>>();
+    join!(
+        listener(&c, reactor_input_channel_send, boardcast_channels_send),
+        sender(boardcast_channels_recv, reactor_output_channel_recv),
+        reactor_prifi(
+            &c,
+            base_prf,
+            bulk_prf,
+            reactor_input_channel_recv,
+            reactor_output_channel_send
+        ),
+    );
+}
+
+pub async fn reactor_prifi(
+    c: &Config,
+    base_prf: Vec<Integer>,
+    _bulk_prf: Vec<Integer>,
+    reactor_input_channel: Receiver<Vec<u8>>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let (base_input_channel_send, base_input_channel_recv) = unbounded::<ClientPrifiMessage>();
+    let msg_dist = || async move {
+        loop {
+            let message = &reactor_input_channel.recv().await.unwrap();
+            info!("Got message of size {}.", message.len());
+            let message: Message = bincode::deserialize(&message).unwrap();
+            match message {
+                Message::ClientPrifiMessage(msg) => {
+                    base_input_channel_send.send(msg).await.unwrap();
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
+                }
+            }
+        }
+    };
+    join!(
+        msg_dist(),
+        reactor_prifi_round(
+            c,
+            base_prf,
+            base_input_channel_recv,
+            reactor_output_channel.clone()
+        ),
+    );
+}
+
+pub async fn reactor_prifi_round(
+    c: &Config,
+    _base_prf: Vec<Integer>,
+    base_input_channel: Receiver<ClientPrifiMessage>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientPrifiMessage>>::new();
+    let mut round: usize = 0;
+    loop {
+        round += 1;
+        info!("Base round {}.", round);
+        if base_protocol_buffer.get(&round).is_none() {
+            base_protocol_buffer.insert(round, HashMap::new());
+        }
+        loop {
+            let msg = base_input_channel.recv().await.unwrap();
+            info!(
+                "Received ClientBaseMessage from {} on round {}.",
+                msg.nid, msg.round
+            );
+            if base_protocol_buffer.get(&msg.round).is_none() {
+                base_protocol_buffer.insert(msg.round, HashMap::new());
+            }
+            base_protocol_buffer
+                .get_mut(&msg.round)
+                .unwrap()
+                .insert(msg.nid, msg);
+            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
+                info!("All prifi messages received. Computing...");
+                let nbits: usize = 1024 * 8;
+                let nguards: usize = 10;
+                let mut rand = rug::rand::RandState::new();
+                let prgs: Vec<Integer> = std::iter::repeat_with(|| {
+                    Integer::from(Integer::random_bits(nbits as u32, &mut rand))
+                })
+                .take(nguards)
+                .collect();
+                for i in 0..c.client_size {
+                    let msg = base_protocol_buffer.get(&round).unwrap().get(&i).unwrap();
+                    let mut xored_val = msg.slot_messages[0].clone();
+                    let mut xored_prg = Integer::from(0);
+                    for j in 2..c.client_size {
+                        xored_val = xored_val
+                            ^ &base_protocol_buffer
+                                .get(&round)
+                                .unwrap()
+                                .get(&j)
+                                .unwrap()
+                                .slot_messages[i];
+                    }
+                    for k in 2..nguards {
+                        xored_prg = xored_prg ^ &prgs[k];
+                    }
+                    xored_val ^= xored_prg;
+                }
+                let message = bincode::serialize(&Message::Ok).unwrap();
+                info!("Sending Server Ok Message, size = {}...", message.len());
+                reactor_output_channel.send(message).await.unwrap();
+                info!("Sent Server Ok Message.");
+                base_protocol_buffer.remove(&round);
+                break;
+            }
+        }
+    }
 }
 
 pub async fn reactor(
