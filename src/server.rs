@@ -353,6 +353,7 @@ pub async fn reactor_base_round(
                 .insert(msg.nid, msg);
             if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All base messages received. Computing...");
+                /*
                 let mut rand = rug::rand::RandState::new();
                 crate::timing::compute(&crate::timing::CompParameters {
                     a: std::iter::repeat_with(|| {
@@ -369,6 +370,7 @@ pub async fn reactor_base_round(
                     w: c.base_params.ring_v.clone(),
                     order: c.base_params.q.clone(),
                 });
+                */
                 let perm =
                     solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
                 let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
@@ -415,6 +417,7 @@ pub async fn reactor_bulk_round(
                 .insert(msg.nid, msg);
             if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All bulk messages received. Computing...");
+                /*
                 let mut rand = rug::rand::RandState::new();
                 crate::timing::compute(&crate::timing::CompParameters {
                     a: std::iter::repeat_with(|| {
@@ -431,6 +434,7 @@ pub async fn reactor_bulk_round(
                     w: c.bulk_params.ring_v.clone(),
                     order: c.bulk_params.q.clone(),
                 });
+                */
                 compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap()).await;
                 bulk_protocol_buffer.remove(&round);
                 break;

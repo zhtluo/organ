@@ -18,6 +18,7 @@ fn send_client_base_message(
         "evaluations: [{}, {}, {}, ...]",
         base_prf[0], base_prf[1], base_prf[2]
     );
+    /*
     let mut rand = rug::rand::RandState::new();
     crate::timing::compute(&crate::timing::CompParameters {
         a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
@@ -30,6 +31,7 @@ fn send_client_base_message(
         w: c.base_params.ring_v.clone(),
         order: c.base_params.q.clone(),
     });
+    */
 
     let mut slot_msg = Integer::from(1);
     let mut slot_messages = Vec::<Integer>::with_capacity(c.client_size);
@@ -61,6 +63,7 @@ fn send_client_bulk_message(
     socket: &mut TcpStream,
     round: usize,
 ) {
+    /*
     let mut rand = rug::rand::RandState::new();
     crate::timing::compute(&crate::timing::CompParameters {
         a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
@@ -73,6 +76,7 @@ fn send_client_bulk_message(
         w: c.bulk_params.ring_v.clone(),
         order: c.bulk_params.q.clone(),
     });
+    */
 
     let slots_per_client = c.bulk_params.vector_len;
     let slot_index_start = nid * slots_per_client;
