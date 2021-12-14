@@ -8,6 +8,7 @@ use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use futures::stream::StreamExt;
 use futures::{future::join_all, join, select, FutureExt};
+use rayon::prelude::*;
 use rug::Integer;
 use std::collections::HashMap;
 
@@ -46,18 +47,18 @@ async fn compute_message(
     bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
-    /*
-    let mut relay_messages =
-        Vec::<Integer>::with_capacity(c.bulk_params.vector_len * c.client_size);
-    for i in 0..c.bulk_params.vector_len * c.client_size {
-        let mut relay_msg_of_slot = Integer::from(0);
-        for (_nid, msg) in messages.iter() {
-            relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.bulk_params.q;
-        }
-        relay_messages.push(relay_msg_of_slot);
-    }
-    */
+    let relay_messages: Vec<Integer> = (0..c.bulk_params.vector_len * c.client_size)
+        .into_par_iter()
+        .map(|i| {
+            let mut relay_msg_of_slot = Integer::from(0);
+            for (_nid, msg) in messages.iter() {
+                relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.bulk_params.q;
+            }
+            relay_msg_of_slot
+        })
+        .collect();
 
+    /*
     let mut futures = Vec::new();
     for i in 0..c.bulk_params.vector_len * c.client_size {
         futures.push((|| async move {
@@ -70,6 +71,7 @@ async fn compute_message(
     }
     let relay_messages = join_all(futures).await;
     debug!("bulk_relay_messages: {:?}", relay_messages);
+    */
 
     let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(bulk_prf.iter()) {
