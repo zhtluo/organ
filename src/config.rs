@@ -88,7 +88,7 @@ pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
                 16,
             )?,
             ring_v: (Integer::from(7) * (Integer::from(2).pow(290))) + 1,
-            vector_len: 5,
+            vector_len: 37,
             bits: 226,
         },
         round: cf.round,

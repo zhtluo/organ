@@ -10,3 +10,6 @@ source $HOME/.cargo/env
 cargo build --release
 
 cp ./target/release/organ ../../
+
+sudo mv /home/ubuntu/sshd_config /etc/ssh/sshd_config
+sudo systemctl restart ssh

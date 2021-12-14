@@ -1,0 +1,3 @@
+script="sleep 10; rm -f ./output_$2.log; RUST_LOG=info ./organ client $2 ./config.json ./base_$2.txt ./bulk_$2.txt 2> output_$2.log &; rm -f ./output_$(expr $2 + 50).log; RUST_LOG=info ./organ client $(expr $2 + 50) ./config.json ./base_$(expr $2 + 50).txt ./bulk_$(expr $2 + 50).txt 2> output_$(expr $2 + 50).log &; rm -f ./output_$(expr $2 + 100).log; RUST_LOG=info ./organ client $(expr $2 + 100) ./config.json ./base_$(expr $2 + 100).txt ./bulk_$(expr $2 + 100).txt 2> output_$(expr $2 + 100).log &; wait"
+ssh -i ~/organ.pem ubuntu@$1 $script
+scp -i ~/organ.pem ubuntu@$1:./output_$2.log ./log/output_$2.log
