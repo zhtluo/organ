@@ -11,6 +11,7 @@ mod flint;
 mod message;
 mod net;
 mod server;
+mod timing;
 
 fn load_prf(input: &str) -> Vec<Integer> {
     let mut prf = Vec::<Integer>::new();

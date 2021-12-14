@@ -18,6 +18,18 @@ fn send_client_base_message(
         "evaluations: [{}, {}, {}, ...]",
         base_prf[0], base_prf[1], base_prf[2]
     );
+    let mut rand = rug::rand::RandState::new();
+    crate::timing::compute(&crate::timing::CompParameters {
+        a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
+            .take(c.base_params.vector_len)
+            .collect(),
+        b: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
+            .take(c.base_params.vector_len)
+            .collect(),
+        p: c.base_params.p.clone(),
+        w: c.base_params.ring_v.clone(),
+        order: c.base_params.q.clone(),
+    });
 
     let mut slot_msg = Integer::from(1);
     let mut slot_messages = Vec::<Integer>::with_capacity(c.client_size);
@@ -49,6 +61,19 @@ fn send_client_bulk_message(
     socket: &mut TcpStream,
     round: usize,
 ) {
+    let mut rand = rug::rand::RandState::new();
+    crate::timing::compute(&crate::timing::CompParameters {
+        a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
+            .take(c.bulk_params.vector_len * c.client_size)
+            .collect(),
+        b: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
+            .take(c.bulk_params.vector_len * c.client_size)
+            .collect(),
+        p: c.bulk_params.p.clone(),
+        w: c.bulk_params.ring_v.clone(),
+        order: c.bulk_params.q.clone(),
+    });
+
     let slots_per_client = c.bulk_params.vector_len;
     let slot_index_start = nid * slots_per_client;
     let slot_index_end = (nid + 1) * slots_per_client;
@@ -56,7 +81,8 @@ fn send_client_bulk_message(
     prf_evaluations.resize(slots_per_client * c.client_size, Integer::from(0));
     let message_ele = nid + 1;
     for i in slot_index_start..slot_index_end {
-        prf_evaluations[i] = (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
+        prf_evaluations[i] =
+            (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
     }
     let message = bincode::serialize(&Message::ClientBulkMessage(ClientBulkMessage {
         round: round,

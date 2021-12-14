@@ -26,7 +26,8 @@ fn solve_equation(
 
     let mut final_equations = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(base_prf.iter()) {
-        let val = (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
+        let val =
+            (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
         let val_in_grp = val / 1000 % &c.base_params.p;
         final_equations.push(val_in_grp);
     }
@@ -43,7 +44,8 @@ fn compute_message(
     bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
-    let mut relay_messages = Vec::<Integer>::with_capacity(c.bulk_params.vector_len * c.client_size);
+    let mut relay_messages =
+        Vec::<Integer>::with_capacity(c.bulk_params.vector_len * c.client_size);
     for i in 0..c.bulk_params.vector_len * c.client_size {
         let mut relay_msg_of_slot = Integer::from(0);
         for (_nid, msg) in messages.iter() {
@@ -55,7 +57,8 @@ fn compute_message(
 
     let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
     for (rmsg, prf) in relay_messages.iter().zip(bulk_prf.iter()) {
-        let val = (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q;
+        let val =
+            (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q;
         let val_in_grp = val / 1000 % &c.bulk_params.p;
         final_values.push(val_in_grp);
     }
@@ -215,6 +218,22 @@ pub async fn reactor_base_round(
                 .insert(msg.nid, msg);
             if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All base messages received. Computing...");
+                let mut rand = rug::rand::RandState::new();
+                crate::timing::compute(&crate::timing::CompParameters {
+                    a: std::iter::repeat_with(|| {
+                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                    })
+                    .take(c.base_params.vector_len)
+                    .collect(),
+                    b: std::iter::repeat_with(|| {
+                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                    })
+                    .take(c.base_params.vector_len)
+                    .collect(),
+                    p: c.base_params.p.clone(),
+                    w: c.base_params.ring_v.clone(),
+                    order: c.base_params.q.clone(),
+                });
                 let perm =
                     solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
                 let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
@@ -261,6 +280,22 @@ pub async fn reactor_bulk_round(
                 .insert(msg.nid, msg);
             if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All bulk messages received. Computing...");
+                let mut rand = rug::rand::RandState::new();
+                crate::timing::compute(&crate::timing::CompParameters {
+                    a: std::iter::repeat_with(|| {
+                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                    })
+                    .take(c.bulk_params.vector_len * c.client_size)
+                    .collect(),
+                    b: std::iter::repeat_with(|| {
+                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                    })
+                    .take(c.bulk_params.vector_len * c.client_size)
+                    .collect(),
+                    p: c.bulk_params.p.clone(),
+                    w: c.bulk_params.ring_v.clone(),
+                    order: c.bulk_params.q.clone(),
+                });
                 compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap());
                 bulk_protocol_buffer.remove(&round);
                 break;
