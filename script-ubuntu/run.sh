@@ -5,7 +5,7 @@ done < $1
 bash ./script-ubuntu/run_server.sh ${IPS[0]} &
 for ((i = 1; i <= $(expr ${#IPS[@]} - 1); i++))
 do
-    bash ./script-ubuntu/run_client.sh ${IPS[$i]} $(expr $i - 1) &
+    bash ./script-ubuntu/run_client.sh ${IPS[$i]} $2 $(expr $i - 1) &
 done
 
 wait

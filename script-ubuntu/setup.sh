@@ -17,7 +17,7 @@ echo ':7000",' >> $2/config.json
 echo -n '"client_size": ' >> $2/config.json
 echo -n $(expr ${#PIPS[@]} - 1) >> $2/config.json
 echo ',' >> $2/config.json
-echo '"round": 10' >> $2/config.json
+echo '"round": 110' >> $2/config.json
 echo "}" >> $2/config.json
 
 bash ./script-ubuntu/setup_server.sh ${IPS[0]} $2 &

@@ -55,8 +55,7 @@ fn send_client_bulk_message(
     let mut prf_evaluations = bulk_prf.clone();
     let message_ele = nid + 1;
     for i in slot_index_start..slot_index_end {
-        prf_evaluations[i] =
-            (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
+        prf_evaluations[i] = (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
     }
     let message = bincode::serialize(&Message::ClientBulkMessage(ClientBulkMessage {
         round: round,
@@ -72,24 +71,28 @@ fn send_client_bulk_message(
 pub fn main(c: Config, nid: usize, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
     debug!("Connecting to {:?}...", c.server_addr);
     let mut socket = TcpStream::connect(c.server_addr).unwrap();
-    for round in 0..c.round {
-        info!("Round {}.", round);
-        send_client_base_message(&c, nid, &base_prf, &mut socket, round);
-    }
-    for _round in 0..2 * c.round {
-        let buf = read_stream(&mut socket).unwrap();
-        let message: Message = bincode::deserialize(&buf).unwrap();
-        match message {
-            Message::ServerBaseMessage(msg) => {
-                info!("Received ServerBaseMessage on round {}.", msg.round);
-                send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, msg.round);
+    let mut round: usize = 0;
+    loop {
+        if round < c.round {
+            round += 1;
+            info!("Round {}.", round);
+            send_client_base_message(&c, nid, &base_prf, &mut socket, round);
+
+            let buf = read_stream(&mut socket).unwrap();
+            let message: Message = bincode::deserialize(&buf).unwrap();
+            match message {
+                Message::ServerBaseMessage(msg) => {
+                    info!("Received ServerBaseMessage on round {}.", msg.round);
+                    if msg.round == round {
+                        send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, round);
+                    }
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
+                }
             }
-            Message::ServerBulkMessage => {
-                info!("Received ServerBulkMessage.");
-            }
-            _ => {
-                error!("Unknown message {:?}.", message);
-            }
+        } else {
+            return;
         }
     }
 }
