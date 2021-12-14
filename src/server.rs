@@ -7,7 +7,7 @@ use crate::net::{async_read_stream, async_write_stream};
 use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use futures::stream::StreamExt;
-use futures::{join, select, FutureExt};
+use futures::{future::join_all, join, select, FutureExt};
 use rug::Integer;
 use std::collections::HashMap;
 
@@ -41,11 +41,12 @@ fn solve_equation(
     solve
 }
 
-fn compute_message(
+async fn compute_message(
     c: &Config,
     bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
+    /*
     let mut relay_messages =
         Vec::<Integer>::with_capacity(c.bulk_params.vector_len * c.client_size);
     for i in 0..c.bulk_params.vector_len * c.client_size {
@@ -55,6 +56,19 @@ fn compute_message(
         }
         relay_messages.push(relay_msg_of_slot);
     }
+    */
+
+    let mut futures = Vec::new();
+    for i in 0..c.bulk_params.vector_len * c.client_size {
+        futures.push((|| async move {
+            let mut relay_msg_of_slot = Integer::from(0);
+            for (_nid, msg) in messages.iter() {
+                relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.bulk_params.q;
+            }
+            relay_msg_of_slot
+        })());
+    }
+    let relay_messages = join_all(futures).await;
     debug!("bulk_relay_messages: {:?}", relay_messages);
 
     let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
@@ -415,7 +429,7 @@ pub async fn reactor_bulk_round(
                     w: c.bulk_params.ring_v.clone(),
                     order: c.bulk_params.q.clone(),
                 });
-                compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap());
+                compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap()).await;
                 bulk_protocol_buffer.remove(&round);
                 break;
             }
