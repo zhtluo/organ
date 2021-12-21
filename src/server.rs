@@ -73,13 +73,16 @@ async fn compute_message(
     debug!("bulk_relay_messages: {:?}", relay_messages);
     */
 
-    let mut final_values = Vec::<Integer>::with_capacity(relay_messages.len());
-    for (rmsg, prf) in relay_messages.iter().zip(bulk_prf.iter()) {
-        let val =
-            (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q;
-        let val_in_grp = val / 1000 % &c.bulk_params.p;
-        final_values.push(val_in_grp);
-    }
+    let final_values: Vec<Integer> = relay_messages
+        .par_iter()
+        .zip(bulk_prf.par_iter())
+        .map(|(rmsg, prf)| {
+            let val = (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q)
+                % &c.bulk_params.q;
+            let val_in_grp = val / 1000 % &c.bulk_params.p;
+            val_in_grp
+        })
+        .collect();
     debug!("final_values: {:?}", final_values);
 
     final_values
