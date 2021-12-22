@@ -25,3 +25,10 @@ features = ["serde"]
 [dependencies.async-std]
 version = "1.6"
 features = ["attributes"]
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "bench"
+harness = false

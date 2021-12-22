@@ -1,17 +1,11 @@
 #[macro_use]
 extern crate log;
 
+use organ::{client, config, server};
 use regex::Regex;
 use rug::Integer;
 use std::env;
 use std::fs;
-mod client;
-mod config;
-mod flint;
-mod message;
-mod net;
-mod server;
-mod timing;
 
 fn load_prf(input: &str) -> Vec<Integer> {
     let mut prf = Vec::<Integer>::new();

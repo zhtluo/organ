@@ -42,7 +42,7 @@ fn solve_equation(
     solve
 }
 
-async fn compute_message(
+pub fn compute_message(
     c: &Config,
     bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
@@ -438,7 +438,7 @@ pub async fn reactor_bulk_round(
                     order: c.bulk_params.q.clone(),
                 });
                 */
-                compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap()).await;
+                compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap());
                 bulk_protocol_buffer.remove(&round);
                 break;
             }
