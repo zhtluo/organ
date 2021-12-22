@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use organ::*;
 use rug::ops::Pow;
 use rug::Integer;
@@ -36,7 +36,7 @@ pub fn criterion_benchmark_compute_message(c: &mut Criterion) {
     let mut rand = rug::rand::RandState::new();
     let bulk: Vec<Integer> =
         std::iter::repeat_with(|| Integer::from(conf.bulk_params.p.random_below_ref(&mut rand)))
-            .take(conf.bulk_params.vector_len * 200)
+            .take(conf.bulk_params.vector_len * conf.client_size)
             .collect();
     let mut messages = HashMap::<usize, organ::message::ClientBulkMessage>::new();
     for i in 0..conf.client_size {
@@ -48,14 +48,14 @@ pub fn criterion_benchmark_compute_message(c: &mut Criterion) {
                 slot_messages: std::iter::repeat_with(|| {
                     Integer::from(conf.bulk_params.p.random_below_ref(&mut rand))
                 })
-                .take(conf.bulk_params.vector_len * 200)
+                .take(conf.bulk_params.vector_len * conf.client_size)
                 .collect(),
             },
         );
     }
     c.bench_function("compute_message", |b| {
         b.iter(|| {
-            server::compute_message(&conf, &bulk, &messages);
+            server::compute_message(black_box(&conf), black_box(&bulk), black_box(&messages));
         })
     });
 }
