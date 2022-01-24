@@ -1,8 +1,11 @@
-RUST_LOG=debug ./target/release/organ server 0 ./target/PREPROCESSED_PRF/n$1/config.json ./target/PREPROCESSED_PRF/n$1/RELAY/bits_32.txt ./target/PREPROCESSED_PRF/n$1/RELAY/bits_226.txt &
+set -e
+cd ./target/n$1/
+RUST_LOG=debug ../release/organ config ./config.json
+RUST_LOG=debug ../release/organ server 0 ./config.json ./bits_32_relay.txt ./bits_226_relay.txt &
 sleep 1
 for ((i = 0; i < $1; i++))
 do
-	RUST_LOG=debug ./target/release/organ client $i ./target/PREPROCESSED_PRF/n$1/config.json ./target/PREPROCESSED_PRF/n$1/bits_32_nid_$i.txt ./target/PREPROCESSED_PRF/n$1/bits_226_nid_$i.txt &
+	RUST_LOG=debug ../release/organ client $i ./config.json ./bits_32_nid_$i.txt ./bits_226_nid_$i.txt &
 done
 
 wait

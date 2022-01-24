@@ -47,7 +47,7 @@ pub fn compute_message(
     bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
-    let relay_messages: Vec<Integer> = (0..c.bulk_params.vector_len * c.client_size)
+    let relay_messages: Vec<Integer> = (0..c.bulk_params.vector_len)
         .into_par_iter()
         .map(|i| {
             let mut relay_msg_of_slot = Integer::from(0);

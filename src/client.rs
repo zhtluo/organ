@@ -78,11 +78,11 @@ fn send_client_bulk_message(
     });
     */
 
-    let slots_per_client = c.bulk_params.vector_len;
+    let slots_per_client = c.bulk_params.vector_len / c.client_size;
     let slot_index_start = nid * slots_per_client;
     let slot_index_end = (nid + 1) * slots_per_client;
     let mut prf_evaluations = bulk_prf.clone();
-    prf_evaluations.resize(slots_per_client * c.client_size, Integer::from(0));
+    // prf_evaluations.resize(slots_per_client * c.client_size, Integer::from(0));
     let message_ele = nid + 1;
     for i in slot_index_start..slot_index_end {
         prf_evaluations[i] =

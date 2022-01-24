@@ -1,4 +1,5 @@
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use organ::config::*;
 use organ::*;
 use rug::ops::Pow;
 use rug::Integer;
@@ -11,24 +12,31 @@ pub fn criterion_benchmark_compute_message(c: &mut Criterion) {
             0,
         ),
         client_size: 200,
-        base_params: config::ProtocolParams {
+        base_params: ProtocolParams {
             p: Integer::from(2).pow(32) - 5,
             // order of secp112r1
             q: Integer::from_str_radix("db7c2abf62e35e7628dfac6561c5", 16).unwrap(),
-            ring_v: (Integer::from(57) * (Integer::from(2).pow(96))) + 1,
+            ring_v: NttField {
+                order: (Integer::from(57) * (Integer::from(2).pow(96))) + 1,
+                root: Integer::from_str_radix("2418184924512328812370262861594", 10).unwrap(),
+                scale: Integer::from(2).pow(96),
+            },
             vector_len: 2048,
             bits: 32,
         },
-        bulk_params: config::ProtocolParams {
+        bulk_params: ProtocolParams {
             p: Integer::from(2).pow(226) - 5,
             // order of secp256k1
             q: Integer::from_str_radix(
                 "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
                 16,
-            )
-            .unwrap(),
-            ring_v: (Integer::from(7) * (Integer::from(2).pow(290))) + 1,
-            vector_len: 37,
+            ).unwrap(),
+            ring_v: NttField {
+                order: (Integer::from(7) * (Integer::from(2).pow(290))) + 1,
+                root: Integer::from_str_radix("2187", 10).unwrap(),
+                scale: Integer::from(2).pow(290),
+            },
+            vector_len: 8192,
             bits: 226,
         },
         round: 0,

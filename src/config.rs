@@ -8,7 +8,7 @@ use std::net::{AddrParseError, SocketAddr};
 pub struct ProtocolParams {
     pub p: Integer,
     pub q: Integer,
-    pub ring_v: Integer,
+    pub ring_v: NttField,
     pub vector_len: usize,
     pub bits: usize,
 }
@@ -67,6 +67,22 @@ struct JsonConfig {
     pub round: usize,
 }
 
+#[derive(Clone, Debug)]
+pub struct NttField {
+    pub order: Integer,
+    pub root: Integer,
+    pub scale: Integer,
+}
+
+impl NttField {
+    pub fn root_of_unity(&self, n: usize) -> Integer {
+        self.root
+            .clone()
+            .pow_mod(&(self.scale.clone() / Integer::from(n)), &self.order)
+            .unwrap()
+    }
+}
+
 pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
     let cf: JsonConfig = serde_json::from_str(&std::fs::read_to_string(filename)?)?;
     Ok(Config {
@@ -76,7 +92,11 @@ pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
             p: Integer::from(2).pow(32) - 5,
             // order of secp112r1
             q: Integer::from_str_radix("db7c2abf62e35e7628dfac6561c5", 16)?,
-            ring_v: (Integer::from(57) * (Integer::from(2).pow(96))) + 1,
+            ring_v: NttField {
+                order: (Integer::from(57) * (Integer::from(2).pow(96))) + 1,
+                root: Integer::from_str_radix("2418184924512328812370262861594", 10)?,
+                scale: Integer::from(2).pow(96),
+            },
             vector_len: 2048,
             bits: 32,
         },
@@ -87,8 +107,12 @@ pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
                 "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
                 16,
             )?,
-            ring_v: (Integer::from(7) * (Integer::from(2).pow(290))) + 1,
-            vector_len: 37,
+            ring_v: NttField {
+                order: (Integer::from(7) * (Integer::from(2).pow(290))) + 1,
+                root: Integer::from_str_radix("2187", 10)?,
+                scale: Integer::from(2).pow(290),
+            },
+            vector_len: 8192,
             bits: 226,
         },
         round: cf.round,
