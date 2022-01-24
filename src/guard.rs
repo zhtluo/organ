@@ -40,4 +40,7 @@ pub fn message_gen(params: &ProtocolParams, mut shares: Vec<Integer>) -> Vec<Int
         .collect();
     bit_rev_radix_2_intt(&mut comp_result, &params.ring_v.order, &root_of_unity);
     comp_result
+        .iter()
+        .map(|i| Integer::from(i * &params.q) / &params.ring_v.order)
+        .collect()
 }
