@@ -51,7 +51,8 @@ fn send_client_base_message(
         round: round,
         nid: nid,
         slot_messages: generate_client_base_message(&c, nid, &base_prf.share.scaled),
-        slot_messages_blinding: generate_client_base_message(&c, nid, &base_prf.blinding.scaled),
+        blame: base_prf.share.scaled.clone(),
+        blame_blinding: base_prf.blinding.scaled.clone(),
         slots_needed: 1,
         e: base_prf.e.clone(),
     }))

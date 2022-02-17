@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{Config, ProtocolParams};
 use crate::ecc::{to_scalar, G, H};
 use crate::flint::solve_impl;
 use crate::guard::SetupRelay;
@@ -334,6 +334,7 @@ pub async fn reactor(
 }
 
 fn verify(
+    params: &ProtocolParams,
     msg: &Vec<Integer>,
     msg_b: &Vec<Integer>,
     e: &Vec<AffinePoint>,
@@ -343,7 +344,13 @@ fn verify(
         .zip(msg_b.par_iter())
         .zip(e.par_iter())
         .zip(qw.par_iter())
-        .all(|(((a, b), c), d)| ((G * to_scalar(&a) + H * to_scalar(&b)) + c).to_affine() == *d)
+        .all(|(((a, b), c), d)| {
+            ((G * to_scalar(&Integer::from(a * &params.ring_v.order))
+                + H * to_scalar(&Integer::from(b * &params.ring_v.order)))
+                + c)
+                .to_affine()
+                == *d
+        })
 }
 
 pub async fn reactor_base_round(
@@ -370,8 +377,9 @@ pub async fn reactor_base_round(
                 base_protocol_buffer.insert(msg.round, HashMap::new());
             }
             if !verify(
-                &msg.slot_messages,
-                &msg.slot_messages_blinding,
+                &c.base_params,
+                &msg.blame,
+                &msg.blame_blinding,
                 &msg.e,
                 &base_prf.qw[msg.nid],
             ) {

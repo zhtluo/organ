@@ -16,3 +16,16 @@ pub fn to_scalar(x: &Integer) -> Scalar {
 
 pub const G: AffinePoint = AffinePoint::GENERATOR;
 pub const H: AffinePoint = AffinePoint::GENERATOR;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k256::Scalar;
+    use rug::Integer;
+
+    #[test]
+    fn scalar() {
+        assert_eq!(to_scalar(&Integer::from(1)), Scalar::ONE);
+        assert_eq!(to_scalar(&Integer::from(0)), Scalar::ZERO);
+    }
+}

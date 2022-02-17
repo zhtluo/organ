@@ -7,7 +7,8 @@ pub struct ClientBaseMessage {
     pub round: usize,
     pub nid: usize,
     pub slot_messages: Vec<Integer>,
-    pub slot_messages_blinding: Vec<Integer>,
+    pub blame: Vec<Integer>,
+    pub blame_blinding: Vec<Integer>,
     pub slots_needed: usize,
     pub e: Vec<AffinePoint>,
 }

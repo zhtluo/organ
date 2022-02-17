@@ -82,7 +82,7 @@ pub fn gen_setup_vector(params: &ProtocolParams, mut shares: Vec<Integer>) -> Se
         .product
         .iter()
         .zip(result.scaled.iter())
-        .map(|(w, z)| Integer::from(w * &params.q) - z * &params.ring_v.scale)
+        .map(|(w, z)| Integer::from(w * &params.q) - z * &params.ring_v.order)
         .collect();
     result
 }
