@@ -18,6 +18,8 @@ flint-sys = "0.4.0"
 futures = "0.3"
 rayon = "1.5"
 sha2 = "0.10"
+elliptic-curve = { version = "0.11.12", features = ["arithmetic"] }
+k256 = { version = "0.10.2", features = ["arithmetic", "serde"] }
 
 [dependencies.rug]
 version = "1.11.0"

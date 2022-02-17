@@ -3,6 +3,7 @@ extern crate log;
 
 pub mod client;
 pub mod config;
+pub mod ecc;
 pub mod flint;
 pub mod guard;
 pub mod message;

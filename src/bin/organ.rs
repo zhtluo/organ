@@ -2,17 +2,12 @@
 extern crate log;
 
 use organ::{client, config, guard, server};
-use regex::Regex;
 use rug::Integer;
 use std::env;
 use std::fs;
 
-fn load_prf(input: &str) -> Vec<Integer> {
-    let mut prf = Vec::<Integer>::new();
-    for mat in Regex::new(r"[0-9]+").unwrap().find_iter(input) {
-        prf.push(Integer::from_str_radix(mat.as_str(), 10).unwrap());
-    }
-    prf
+fn load_prf(input: &Vec<u8>) -> guard::Setup {
+    bincode::deserialize::<guard::Setup>(input).unwrap()
 }
 
 fn generate_prf(client_size: usize, params: &config::ProtocolParams) {
@@ -22,19 +17,23 @@ fn generate_prf(client_size: usize, params: &config::ProtocolParams) {
     let shares: Vec<Vec<Integer>> = (0..client_size)
         .map(|i| shares.iter().map(|v| v[i].clone()).collect())
         .collect();
+    let setup_values: Vec<guard::SetupValues> = (0..client_size)
+        .map(|i| guard::gen_setup_values(&params, &shares[i]))
+        .collect();
     for i in 0..client_size {
         std::fs::write(
             format!("bits_{}_nid_{}.txt", params.bits.to_string(), i.to_string()),
-            format!("{:?}", guard::message_gen(&params, shares[i].clone())),
+            bincode::serialize(&guard::Setup::SetupValues(setup_values[i].clone())).unwrap(),
         )
         .unwrap();
     }
     std::fs::write(
         format!("bits_{}_relay.txt", params.bits.to_string()),
-        format!(
-            "{:?}",
-            guard::message_gen(&params, vec![Integer::from(1); params.vector_len])
-        ),
+        bincode::serialize(&guard::Setup::SetupRelay(guard::gen_setup_relay(
+            &params,
+            &setup_values,
+        )))
+        .unwrap(),
     )
     .unwrap();
 }
@@ -56,14 +55,22 @@ async fn main() {
         info!("Reading from {}...", args[3]);
         let conf = config::load_config(&args[3]).unwrap();
         info!("Reading from {}...", args[4]);
-        let base_prf = load_prf(&fs::read_to_string(&args[4]).unwrap());
+        let base_prf = load_prf(&fs::read(&args[4]).unwrap());
         info!("Reading from {}...", args[5]);
-        let bulk_prf = load_prf(&fs::read_to_string(&args[5]).unwrap());
+        let bulk_prf = load_prf(&fs::read(&args[5]).unwrap());
         if args[1] == "client" {
             let nid: usize = args[2].parse().unwrap();
-            client::main(conf, nid, base_prf, bulk_prf);
+            if let guard::Setup::SetupValues(base) = base_prf {
+                if let guard::Setup::SetupValues(bulk) = bulk_prf {
+                    client::main(conf, nid, base, bulk);
+                }
+            }
         } else if args[1] == "server" {
-            server::main(conf, base_prf, bulk_prf).await;
+            if let guard::Setup::SetupRelay(base) = base_prf {
+                if let guard::Setup::SetupRelay(bulk) = bulk_prf {
+                    server::main(conf, base, bulk).await;
+                }
+            }
         }
     } else {
         println!(r"Usage:");

@@ -1,5 +1,7 @@
 use crate::config::Config;
+use crate::ecc::{to_scalar, G, H};
 use crate::flint::solve_impl;
+use crate::guard::SetupRelay;
 use crate::message::{
     ClientBaseMessage, ClientBulkMessage, ClientPrifiMessage, Message, ServerBaseMessage,
 };
@@ -7,14 +9,15 @@ use crate::net::{async_read_stream, async_write_stream};
 use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use futures::stream::StreamExt;
-use futures::{future::join_all, join, select, FutureExt};
+use futures::{join, select, FutureExt};
+use k256::AffinePoint;
 use rayon::prelude::*;
 use rug::Integer;
 use std::collections::HashMap;
 
 fn solve_equation(
     c: &Config,
-    base_prf: &Vec<Integer>,
+    base_prf: &SetupRelay,
     messages: &HashMap<usize, ClientBaseMessage>,
 ) -> Vec<Integer> {
     let mut relay_messages = Vec::<Integer>::with_capacity(c.base_params.vector_len);
@@ -28,7 +31,10 @@ fn solve_equation(
     debug!("base_relay_messages: {:?}", relay_messages);
 
     let mut final_equations = Vec::<Integer>::with_capacity(relay_messages.len());
-    for (rmsg, prf) in relay_messages.iter().zip(base_prf.iter()) {
+    for (rmsg, prf) in relay_messages
+        .iter()
+        .zip(base_prf.values.share.scaled.iter())
+    {
         let val =
             (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
         let val_in_grp = val / 1000 % &c.base_params.p;
@@ -44,7 +50,7 @@ fn solve_equation(
 
 pub fn compute_message(
     c: &Config,
-    bulk_prf: &Vec<Integer>,
+    bulk_prf: &SetupRelay,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
     let relay_messages: Vec<Integer> = (0..c.bulk_params.vector_len)
@@ -75,7 +81,7 @@ pub fn compute_message(
 
     let final_values: Vec<Integer> = relay_messages
         .par_iter()
-        .zip(bulk_prf.par_iter())
+        .zip(bulk_prf.values.share.scaled.par_iter())
         .map(|(rmsg, prf)| {
             let val = (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q)
                 % &c.bulk_params.q;
@@ -149,7 +155,7 @@ async fn sender(
     }
 }
 
-pub async fn main(c: Config, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
+pub async fn main(c: Config, base_prf: SetupRelay, bulk_prf: SetupRelay) {
     let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
     let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
     let (reactor_output_channel_send, reactor_output_channel_recv) = unbounded::<Vec<u8>>();
@@ -285,8 +291,8 @@ pub async fn reactor_prifi_round(
 
 pub async fn reactor(
     c: &Config,
-    base_prf: Vec<Integer>,
-    bulk_prf: Vec<Integer>,
+    base_prf: SetupRelay,
+    bulk_prf: SetupRelay,
     reactor_input_channel: Receiver<Vec<u8>>,
     reactor_output_channel: Sender<Vec<u8>>,
 ) {
@@ -327,9 +333,22 @@ pub async fn reactor(
     );
 }
 
+fn verify(
+    msg: &Vec<Integer>,
+    msg_b: &Vec<Integer>,
+    e: &Vec<AffinePoint>,
+    qw: &Vec<AffinePoint>,
+) -> bool {
+    msg.par_iter()
+        .zip(msg_b.par_iter())
+        .zip(e.par_iter())
+        .zip(qw.par_iter())
+        .all(|(((a, b), c), d)| ((G * to_scalar(&a) + H * to_scalar(&b)) + c).to_affine() == *d)
+}
+
 pub async fn reactor_base_round(
     c: &Config,
-    base_prf: Vec<Integer>,
+    base_prf: SetupRelay,
     base_input_channel: Receiver<ClientBaseMessage>,
     reactor_output_channel: Sender<Vec<u8>>,
 ) {
@@ -349,6 +368,14 @@ pub async fn reactor_base_round(
             );
             if base_protocol_buffer.get(&msg.round).is_none() {
                 base_protocol_buffer.insert(msg.round, HashMap::new());
+            }
+            if !verify(
+                &msg.slot_messages,
+                &msg.slot_messages_blinding,
+                &msg.e,
+                &base_prf.qw[msg.nid],
+            ) {
+                warn!("Blame protocol verification failure for {}.", msg.nid);
             }
             base_protocol_buffer
                 .get_mut(&msg.round)
@@ -393,7 +420,7 @@ pub async fn reactor_base_round(
 
 pub async fn reactor_bulk_round(
     c: &Config,
-    bulk_prf: Vec<Integer>,
+    bulk_prf: SetupRelay,
     bulk_input_channel: Receiver<ClientBulkMessage>,
     _reactor_output_channel: Sender<Vec<u8>>,
 ) {
