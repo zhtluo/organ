@@ -97,7 +97,7 @@ pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
                 root: Integer::from_str_radix("2418184924512328812370262861594", 10)?,
                 scale: Integer::from(2).pow(96),
             },
-            vector_len: 2048,
+            vector_len: 256,
             bits: 32,
         },
         bulk_params: ProtocolParams {
@@ -112,7 +112,7 @@ pub fn load_config(filename: &str) -> Result<Config, ConfigError> {
                 root: Integer::from_str_radix("2187", 10)?,
                 scale: Integer::from(2).pow(290),
             },
-            vector_len: 8192,
+            vector_len: 256,
             bits: 226,
         },
         round: cf.round,

@@ -21,12 +21,14 @@ fn generate_prf(client_size: usize, params: &config::ProtocolParams) {
         .map(|i| guard::gen_setup_values(&params, &shares[i]))
         .collect();
     for i in 0..client_size {
+        info!("Generating config for node {}...", i);
         std::fs::write(
             format!("bits_{}_nid_{}.txt", params.bits.to_string(), i.to_string()),
             bincode::serialize(&guard::Setup::SetupValues(setup_values[i].clone())).unwrap(),
         )
         .unwrap();
     }
+    info!("Generating config for relay...");
     std::fs::write(
         format!("bits_{}_relay.txt", params.bits.to_string()),
         bincode::serialize(&guard::Setup::SetupRelay(guard::gen_setup_relay(
@@ -49,7 +51,9 @@ async fn main() {
     if args[1] == "config" {
         info!("Reading from {}...", args[2]);
         let conf = config::load_config(&args[2]).unwrap();
+        info!("Generating base round config...");
         generate_prf(conf.client_size, &conf.base_params);
+        info!("Generating bulk round config...");
         generate_prf(conf.client_size, &conf.bulk_params);
     } else if args[1] == "client" || args[1] == "server" {
         info!("Reading from {}...", args[3]);
