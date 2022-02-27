@@ -1,6 +1,6 @@
 use crate::config::ProtocolParams;
-use crate::ecc::{get_order, to_scalar, G, H};
-use k256::{AffinePoint, ProjectivePoint};
+use crate::ecc::{add, get_g, get_h, mul, new_big_num_context, to_bytes};
+use openssl::ec::EcPoint;
 use rayon::prelude::*;
 use rug::{Complete, Integer};
 use rug_fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
@@ -21,13 +21,13 @@ pub struct SetupVector {
 pub struct SetupValues {
     pub share: SetupVector,
     pub blinding: SetupVector,
-    pub e: Vec<AffinePoint>,
+    pub e: Vec<Vec<u8>>,
 }
 
 #[derive(Serialize, Clone, Deserialize)]
 pub struct SetupRelay {
     pub values: SetupValues,
-    pub qw: Vec<Vec<AffinePoint>>,
+    pub qw: Vec<Vec<Vec<u8>>>,
 }
 
 #[derive(Serialize, Clone, Deserialize)]
@@ -95,7 +95,16 @@ pub fn gen_setup_values(params: &ProtocolParams, shares: &Vec<Integer>) -> Setup
     let blinding = gen_setup_vector(params, shares.clone());
     SetupValues {
         e: (0..params.vector_len)
-            .map(|i| (G * to_scalar(&share.e[i]) + H * to_scalar(&blinding.e[i])).to_affine())
+            .map(|i| {
+                to_bytes(
+                    params,
+                    &add(
+                        params,
+                        &mul(params, &get_g(params), &share.e[i]),
+                        &mul(params, &get_h(params), &blinding.e[i]),
+                    ),
+                )
+            })
             .collect(),
         share: share,
         blinding: blinding,
@@ -106,6 +115,7 @@ fn compute_d(
     order: &Integer,
     _gamma: &Vec<Integer>,
     omega: &Vec<Integer>,
+    omega_len: &Vec<Integer>,
     product_ntt: &Vec<Integer>,
     product: &Vec<Integer>,
 ) -> Vec<Integer> {
@@ -119,7 +129,7 @@ fn compute_d(
                     * Integer::sum(
                         (0..product_ntt.len())
                             .into_par_iter()
-                            .map(|k| Integer::from(&product_ntt[k] * &omega[j * k]))
+                            .map(|k| Integer::from(&product_ntt[k] * &omega_len[j * k / product_ntt.len()]) * &omega[j * k % product_ntt.len()])
                             .collect::<Vec<_>>()
                             .iter(),
                     )
@@ -153,13 +163,23 @@ pub fn gen_setup_relay(params: &ProtocolParams, client_values: &Vec<SetupValues>
     debug!("gamma: {:?}", gamma_inverse);
     info!("Computing omega...");
     let omega_inverse: Vec<Integer> = std::iter::once(Integer::from(1))
-        .chain(
-            (0..params.vector_len * params.vector_len).scan(Integer::from(1), |acc, _| {
-                *acc *= &omega;
-                *acc %= &params.ring_v.order;
-                Some(acc.clone())
-            }),
-        )
+        .chain((0..params.vector_len).scan(Integer::from(1), |acc, _| {
+            *acc *= &omega;
+            *acc %= &params.ring_v.order;
+            Some(acc.clone())
+        }))
+        .collect();
+    let omega_len = Integer::from(
+        omega
+            .pow_mod_ref(&Integer::from(params.vector_len), &params.ring_v.order)
+            .unwrap(),
+    );
+    let omega_len_inverse: Vec<Integer> = std::iter::once(Integer::from(1))
+        .chain((0..params.vector_len).scan(Integer::from(1), |acc, _| {
+            *acc *= &omega_len;
+            *acc %= &params.ring_v.order;
+            Some(acc.clone())
+        }))
         .collect();
 
     let mut hash_vector = compute_hash(0, params.vector_len, &params.ring_v.order);
@@ -173,6 +193,7 @@ pub fn gen_setup_relay(params: &ProtocolParams, client_values: &Vec<SetupValues>
                 &params.ring_v.order,
                 &gamma_inverse,
                 &omega_inverse,
+                &omega_len_inverse,
                 &client_values[i].share.product_ntt,
                 &client_values[i].share.product,
             )
@@ -186,75 +207,129 @@ pub fn gen_setup_relay(params: &ProtocolParams, client_values: &Vec<SetupValues>
                 &params.ring_v.order,
                 &gamma_inverse,
                 &omega_inverse,
+                &omega_len_inverse,
                 &client_values[i].blinding.product_ntt,
                 &client_values[i].blinding.product,
             )
         })
         .collect();
     info!("Computing ab...");
-    let ab: Vec<Vec<AffinePoint>> = (0..client_values.len())
+    let ab: Vec<Vec<EcPoint>> = (0..client_values.len())
         .into_par_iter()
         .map(|i| {
             (0..params.vector_len)
                 .into_par_iter()
                 .map(|j| {
-                    (G * to_scalar(&client_values[i].share.value_ntt[j])
-                        + H * to_scalar(&client_values[i].blinding.value_ntt[j]))
-                    .to_affine()
+                    add(
+                        params,
+                        &mul(params, &get_g(params), &client_values[i].share.value_ntt[j]),
+                        &mul(
+                            params,
+                            &get_h(params),
+                            &client_values[i].blinding.value_ntt[j],
+                        ),
+                    )
                 })
                 .collect()
         })
         .collect();
     info!("Computing qw...");
-    let qw: Vec<Vec<AffinePoint>> = (0..client_values.len())
+    let qw: Vec<Vec<EcPoint>> = (0..client_values.len())
         .into_par_iter()
         .map(|i| {
             (0..params.vector_len)
                 .into_par_iter()
                 .map(|k| {
-                    ((G * to_scalar(&(get_order() - &params.ring_v.order * &d[i][k]))
-                        + H * to_scalar(&(get_order() - &params.ring_v.order * &d_blinding[i][k]))
-                        + (0..params.vector_len)
-                            .into_par_iter()
-                            .map(|j| {
-                                ab[i][j]
-                                    * to_scalar(
+                    mul(
+                        params,
+                        &add(
+                            params,
+                            &add(
+                                params,
+                                &mul(
+                                    params,
+                                    &get_g(params),
+                                    &(-Integer::from(&params.ring_v.order) * &d[i][k]),
+                                ),
+                                &mul(
+                                    params,
+                                    &get_h(params),
+                                    &(-Integer::from(&params.ring_v.order) * &d_blinding[i][k]),
+                                ),
+                            ),
+                            &(0..params.vector_len)
+                                .into_par_iter()
+                                .map(|j| {
+                                    mul(
+                                        params,
+                                        &ab[i][j],
                                         &(Integer::from(
                                             Integer::from(params.vector_len)
                                                 .invert(&params.ring_v.order)
                                                 .unwrap()
                                                 * &hash_vector[j]
-                                                * &omega_inverse[j * k],
+                                                * &omega_len_inverse[j * k / params.vector_len]
+                                                * &omega_inverse[j * k % params.vector_len],
                                         )),
                                     )
-                            })
-                            .sum::<ProjectivePoint>())
-                        * to_scalar(&params.q))
-                    .to_affine()
+                                })
+                                .reduce_with(|a, b| add(params, &a, &b))
+                                .unwrap(),
+                        ),
+                        &params.q,
+                    )
                 })
                 .collect()
         })
         .collect();
-    assert_eq!(
-        qw,
-        (0..client_values.len())
-            .into_par_iter()
-            .map(|i| {
-                (0..params.vector_len)
-                    .into_par_iter()
-                    .map(|j| {
-                        ((H * to_scalar(&client_values[i].blinding.product[j])
-                            + G * to_scalar(&client_values[i].share.product[j]))
-                            * to_scalar(&params.q))
-                        .to_affine()
-                    })
-                    .collect::<Vec<_>>()
+    assert!(qw
+        .iter()
+        .zip(
+            (0..client_values.len())
+                .into_par_iter()
+                .map(|i| {
+                    (0..params.vector_len)
+                        .into_par_iter()
+                        .map(|j| {
+                            mul(
+                                params,
+                                &add(
+                                    params,
+                                    &mul(
+                                        params,
+                                        &get_h(params),
+                                        &client_values[i].blinding.product[j],
+                                    ),
+                                    &mul(
+                                        params,
+                                        &get_g(params),
+                                        &client_values[i].share.product[j],
+                                    ),
+                                ),
+                                &params.q,
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+                .iter()
+        )
+        .all(|(a, b)| {
+            a.iter().zip(b.iter()).all(|(c, d)| {
+                c.eq(
+                    &params.group.as_ref().unwrap(),
+                    &d,
+                    &mut new_big_num_context(),
+                )
+                .unwrap()
             })
-            .collect::<Vec<_>>(),
-    );
+        }),);
     let values = gen_setup_values(params, &vec![Integer::from(1); params.vector_len]);
     SetupRelay {
         values: values,
-        qw: qw,
+        qw: qw
+            .iter()
+            .map(|a| a.iter().map(|b| to_bytes(params, b)).collect::<Vec<_>>())
+            .collect(),
     }
 }

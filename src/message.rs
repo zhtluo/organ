@@ -1,4 +1,3 @@
-use k256::AffinePoint;
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +9,7 @@ pub struct ClientBaseMessage {
     pub blame: Vec<Integer>,
     pub blame_blinding: Vec<Integer>,
     pub slots_needed: usize,
-    pub e: Vec<AffinePoint>,
+    pub e: Vec<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

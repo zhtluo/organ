@@ -1,5 +1,5 @@
 use crate::config::{Config, ProtocolParams};
-use crate::ecc::{to_scalar, G, H};
+use crate::ecc::{add, from_bytes, get_g, get_h, mul, new_big_num_context};
 use crate::flint::solve_impl;
 use crate::guard::SetupRelay;
 use crate::message::{
@@ -10,7 +10,6 @@ use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use futures::stream::StreamExt;
 use futures::{join, select, FutureExt};
-use k256::AffinePoint;
 use rayon::prelude::*;
 use rug::Integer;
 use std::collections::HashMap;
@@ -337,19 +336,37 @@ fn verify(
     params: &ProtocolParams,
     msg: &Vec<Integer>,
     msg_b: &Vec<Integer>,
-    e: &Vec<AffinePoint>,
-    qw: &Vec<AffinePoint>,
+    e: &Vec<Vec<u8>>,
+    qw: &Vec<Vec<u8>>,
 ) -> bool {
     msg.par_iter()
         .zip(msg_b.par_iter())
         .zip(e.par_iter())
         .zip(qw.par_iter())
         .all(|(((a, b), c), d)| {
-            ((G * to_scalar(&Integer::from(a * &params.ring_v.order))
-                + H * to_scalar(&Integer::from(b * &params.ring_v.order)))
-                + c)
-                .to_affine()
-                == *d
+            add(
+                params,
+                &add(
+                    params,
+                    &mul(
+                        params,
+                        &get_g(params),
+                        &Integer::from(a * &params.ring_v.order),
+                    ),
+                    &mul(
+                        params,
+                        &get_h(params),
+                        &Integer::from(b * &params.ring_v.order),
+                    ),
+                ),
+                &from_bytes(params, c),
+            )
+            .eq(
+                &params.group.as_ref().unwrap(),
+                &from_bytes(params, d),
+                &mut new_big_num_context(),
+            )
+            .unwrap()
         })
 }
 

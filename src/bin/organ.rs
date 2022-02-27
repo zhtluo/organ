@@ -55,6 +55,11 @@ async fn main() {
         generate_prf(conf.client_size, &conf.base_params);
         info!("Generating bulk round config...");
         generate_prf(conf.client_size, &conf.bulk_params);
+    } else if args[1] == "dump" {
+        info!("Reading from {}...", args[2]);
+        let conf = config::load_config(&args[2]).unwrap();
+        info!("Dumping to {}...", args[3]);
+        config::dump_config(&args[3], &conf).unwrap();
     } else if args[1] == "client" || args[1] == "server" {
         info!("Reading from {}...", args[3]);
         let conf = config::load_config(&args[3]).unwrap();
