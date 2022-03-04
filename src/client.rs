@@ -5,12 +5,15 @@ use crate::net::{read_stream, write_stream};
 use rug::Integer;
 use std::net::TcpStream;
 
-fn generate_client_base_message(c: &Config, nid: usize, prf: &Vec<Integer>) -> Vec<Integer> {
+fn generate_client_base_message(
+    c: &Config,
+    prf: &Vec<Integer>,
+    message_ele: &Integer,
+) -> Vec<Integer> {
     let mut slot_msg = Integer::from(1);
     let mut slot_messages = Vec::<Integer>::with_capacity(c.client_size);
-    let message_ele = Integer::from(nid + 1);
     for i in 0..c.client_size {
-        slot_msg = slot_msg * &message_ele;
+        slot_msg = slot_msg * message_ele;
         slot_msg = slot_msg % &c.base_params.p;
         let msg_to_append = Integer::from(&prf[i] + 1000 * &slot_msg) % &c.base_params.q;
         slot_messages.push(msg_to_append);
@@ -22,41 +25,50 @@ fn send_client_base_message(
     c: &Config,
     nid: usize,
     base_prf: &SetupValues,
+    message_ele: &Integer,
     socket: &mut TcpStream,
     round: usize,
 ) {
-    debug!("p: {}", c.base_params.p);
-    debug!("q: {}", c.base_params.q);
-    debug!("num_of_slots: {}", c.client_size);
-    debug!(
-        "evaluations: [{}, {}, {}, ...]",
-        base_prf.share.scaled[0], base_prf.share.scaled[1], base_prf.share.scaled[2]
-    );
-    /*
-    let mut rand = rug::rand::RandState::new();
-    crate::timing::compute(&crate::timing::CompParameters {
-        a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
+    if c.do_unzip {
+        let mut rand = rug::rand::RandState::new();
+        crate::timing::compute(&crate::timing::CompParameters {
+            a: std::iter::repeat_with(|| {
+                Integer::from(c.base_params.p.random_below_ref(&mut rand))
+            })
             .take(c.base_params.vector_len)
             .collect(),
-        b: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
+            b: std::iter::repeat_with(|| {
+                Integer::from(c.base_params.p.random_below_ref(&mut rand))
+            })
             .take(c.base_params.vector_len)
             .collect(),
-        p: c.base_params.p.clone(),
-        w: c.base_params.ring_v.clone(),
-        order: c.base_params.q.clone(),
-    });
-    */
+            p: c.base_params.p.clone(),
+            w: c.base_params.ring_v.order.clone(),
+            order: c.base_params.q.clone(),
+        });
+    }
 
     let message = bincode::serialize(&Message::ClientBaseMessage(ClientBaseMessage {
         round: round,
         nid: nid,
-        slot_messages: generate_client_base_message(&c, nid, &base_prf.share.scaled),
-        blame: base_prf.share.scaled.clone(),
-        blame_blinding: base_prf.blinding.scaled.clone(),
-        slots_needed: 1,
+        slot_messages: generate_client_base_message(&c, &base_prf.share.scaled, message_ele),
+        blame: if c.do_blame {
+            Some(base_prf.share.scaled.clone())
+        } else {
+            None
+        },
+        blame_blinding: if c.do_blame {
+            Some(base_prf.blinding.scaled.clone())
+        } else {
+            None
+        },
         e: base_prf.e.clone(),
     }))
     .unwrap();
+
+    if c.do_delay && nid == 0 {
+        std::thread::sleep(std::time::Duration::from_secs(2))
+    }
 
     info!("Sending ClientBaseMessage, size = {}...", message.len());
     write_stream(socket, &message).unwrap();
@@ -66,30 +78,32 @@ fn send_client_base_message(
 fn send_client_bulk_message(
     c: &Config,
     nid: usize,
+    posid: usize,
     bulk_prf: &SetupValues,
     socket: &mut TcpStream,
     round: usize,
 ) {
-    /*
-    let mut rand = rug::rand::RandState::new();
-    crate::timing::compute(&crate::timing::CompParameters {
-        a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
-            .take((c.bulk_params.vector_len * c.client_size).next_power_of_two())
+    if c.do_unzip {
+        let mut rand = rug::rand::RandState::new();
+        crate::timing::compute(&crate::timing::CompParameters {
+            a: std::iter::repeat_with(|| {
+                Integer::from(c.base_params.p.random_below_ref(&mut rand))
+            })
+            .take((c.slot_per_round * c.client_size).next_power_of_two())
             .collect(),
-        b: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
-            .take((c.bulk_params.vector_len * c.client_size).next_power_of_two())
+            b: std::iter::repeat_with(|| {
+                Integer::from(c.base_params.p.random_below_ref(&mut rand))
+            })
+            .take((c.slot_per_round * c.client_size).next_power_of_two())
             .collect(),
-        p: c.bulk_params.p.clone(),
-        w: c.bulk_params.ring_v.clone(),
-        order: c.bulk_params.q.clone(),
-    });
-    */
-
-    let slots_per_client = c.bulk_params.vector_len / c.client_size;
-    let slot_index_start = nid * slots_per_client;
-    let slot_index_end = (nid + 1) * slots_per_client;
-    let mut prf_evaluations = bulk_prf.share.scaled.clone();
-    // prf_evaluations.resize(slots_per_client * c.client_size, Integer::from(0));
+            p: c.bulk_params.p.clone(),
+            w: c.bulk_params.ring_v.order.clone(),
+            order: c.bulk_params.q.clone(),
+        });
+    }
+    let slot_index_start = posid * c.slot_per_round;
+    let slot_index_end = (posid + 1) * c.slot_per_round;
+    let mut prf_evaluations = bulk_prf.share.scaled[0..c.slot_per_round * c.client_size].to_vec();
     let message_ele = nid + 1;
     for i in slot_index_start..slot_index_end {
         prf_evaluations[i] =
@@ -101,6 +115,11 @@ fn send_client_bulk_message(
         slot_messages: prf_evaluations,
     }))
     .unwrap();
+
+    if c.do_delay && nid == 0 {
+        std::thread::sleep(std::time::Duration::from_secs(2))
+    }
+
     info!("Sending ClientBulkMessage, size = {}...", message.len());
     write_stream(socket, &message).unwrap();
     info!("Sent ClientBulkMessage.");
@@ -110,11 +129,16 @@ pub fn main(c: Config, nid: usize, base_prf: SetupValues, bulk_prf: SetupValues)
     debug!("Connecting to {:?}...", c.server_addr);
     let mut socket = TcpStream::connect(c.server_addr).unwrap();
     let mut round: usize = 0;
+    let mut rand = rug::rand::RandState::new();
+    rand.seed(&base_prf.share.scaled[0]);
     loop {
         if round < c.round {
             round += 1;
             info!("Round {}.", round);
-            send_client_base_message(&c, nid, &base_prf, &mut socket, round);
+
+            let message_ele = Integer::from(c.base_params.p.random_below_ref(&mut rand));
+            info!("Message in base round: {}", message_ele);
+            send_client_base_message(&c, nid, &base_prf, &message_ele, &mut socket, round);
 
             let buf = read_stream(&mut socket).unwrap();
             let message: Message = bincode::deserialize(&buf).unwrap();
@@ -122,20 +146,39 @@ pub fn main(c: Config, nid: usize, base_prf: SetupValues, bulk_prf: SetupValues)
                 Message::ServerBaseMessage(msg) => {
                     info!("Received ServerBaseMessage on round {}.", msg.round);
                     if msg.round == round {
-                        send_client_bulk_message(&c, nid, &bulk_prf, &mut socket, round);
+                        send_client_bulk_message(
+                            &c,
+                            nid,
+                            msg.perm.iter().position(|x| x == &message_ele).unwrap(),
+                            &bulk_prf,
+                            &mut socket,
+                            round,
+                        );
                     }
                 }
                 _ => {
                     error!("Unknown message {:?}.", message);
                 }
             }
+
+            let buf = read_stream(&mut socket).unwrap();
+            let message: Message = bincode::deserialize(&buf).unwrap();
+            match message {
+                Message::ServerBulkMessage => {
+                    info!("Received ServerBulkMessage.");
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
+                }
+            }
         } else {
+            std::thread::sleep(std::time::Duration::from_secs(5));
             return;
         }
     }
 }
 
-pub fn main_prifi(c: Config, nid: usize, _base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
+pub fn main_prifi(c: Config, nid: usize) {
     debug!("Connecting to {:?}...", c.server_addr);
     let mut socket = TcpStream::connect(c.server_addr).unwrap();
     let mut round: usize = 0;
@@ -182,6 +225,7 @@ pub fn main_prifi(c: Config, nid: usize, _base_prf: Vec<Integer>, _bulk_prf: Vec
                 }
             }
         } else {
+            std::thread::sleep(std::time::Duration::from_secs(5));
             return;
         }
     }

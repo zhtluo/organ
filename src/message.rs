@@ -6,10 +6,9 @@ pub struct ClientBaseMessage {
     pub round: usize,
     pub nid: usize,
     pub slot_messages: Vec<Integer>,
-    pub blame: Vec<Integer>,
-    pub blame_blinding: Vec<Integer>,
-    pub slots_needed: usize,
-    pub e: Vec<Vec<u8>>,
+    pub blame: Option<Vec<Integer>>,
+    pub blame_blinding: Option<Vec<Integer>>,
+    pub e: Option<Vec<Vec<u8>>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -39,6 +38,7 @@ pub enum Message {
     ClientBaseMessage(ClientBaseMessage),
     ServerBaseMessage(ServerBaseMessage),
     ClientBulkMessage(ClientBulkMessage),
+    ServerBulkMessage,
     ClientPrifiMessage(ClientPrifiMessage),
     Ok,
 }

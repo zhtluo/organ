@@ -10,7 +10,7 @@ fn load_prf(input: &Vec<u8>) -> guard::Setup {
     bincode::deserialize::<guard::Setup>(input).unwrap()
 }
 
-fn generate_prf(client_size: usize, params: &config::ProtocolParams) {
+fn generate_prf(path: &str, client_size: usize, params: &config::ProtocolParams, do_blame: bool) {
     let shares: Vec<Vec<Integer>> = (0..params.vector_len)
         .map(|_| guard::generate_sum_shares(client_size, &params.ring_v.order, &Integer::from(1)))
         .collect();
@@ -18,22 +18,23 @@ fn generate_prf(client_size: usize, params: &config::ProtocolParams) {
         .map(|i| shares.iter().map(|v| v[i].clone()).collect())
         .collect();
     let setup_values: Vec<guard::SetupValues> = (0..client_size)
-        .map(|i| guard::gen_setup_values(&params, &shares[i]))
+        .map(|i| guard::gen_setup_values(&params, &shares[i], do_blame))
         .collect();
     for i in 0..client_size {
         info!("Generating config for node {}...", i);
         std::fs::write(
-            format!("bits_{}_nid_{}.txt", params.bits.to_string(), i.to_string()),
+            format!("./{}/bits_{}_nid_{}.txt", path, params.bits.to_string(), i.to_string()),
             bincode::serialize(&guard::Setup::SetupValues(setup_values[i].clone())).unwrap(),
         )
         .unwrap();
     }
     info!("Generating config for relay...");
     std::fs::write(
-        format!("bits_{}_relay.txt", params.bits.to_string()),
+        format!("./{}/bits_{}_relay.txt", path, params.bits.to_string()),
         bincode::serialize(&guard::Setup::SetupRelay(guard::gen_setup_relay(
             &params,
             &setup_values,
+            do_blame,
         )))
         .unwrap(),
     )
@@ -52,14 +53,23 @@ async fn main() {
         info!("Reading from {}...", args[2]);
         let conf = config::load_config(&args[2]).unwrap();
         info!("Generating base round config...");
-        generate_prf(conf.client_size, &conf.base_params);
+        generate_prf(&args[3], conf.client_size, &conf.base_params, conf.do_blame);
         info!("Generating bulk round config...");
-        generate_prf(conf.client_size, &conf.bulk_params);
+        generate_prf(&args[3], conf.client_size, &conf.bulk_params, conf.do_blame);
     } else if args[1] == "dump" {
         info!("Reading from {}...", args[2]);
         let conf = config::load_config(&args[2]).unwrap();
         info!("Dumping to {}...", args[3]);
         config::dump_config(&args[3], &conf).unwrap();
+    } else if args[1] == "prifi" {
+        info!("Reading from {}...", args[4]);
+        let conf = config::load_config(&args[4]).unwrap();
+        if args[2] == "client" {
+            let nid: usize = args[3].parse().unwrap();
+            client::main_prifi(conf, nid);
+        } else if args[2] == "server" {
+            server::main_prifi(conf).await;
+        }
     } else if args[1] == "client" || args[1] == "server" {
         info!("Reading from {}...", args[3]);
         let conf = config::load_config(&args[3]).unwrap();

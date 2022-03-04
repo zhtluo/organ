@@ -32,6 +32,15 @@ pub struct Config {
     #[serde(default = "default_bulk_params")]
     pub bulk_params: ProtocolParams,
     pub round: usize,
+    pub slot_per_round: usize,
+    #[serde(default)]
+    pub do_blame: bool,
+    #[serde(default)]
+    pub do_unzip: bool,
+    #[serde(default)]
+    pub do_delay: bool,
+    #[serde(default)]
+    pub do_ping: bool,
 }
 
 #[derive(Debug)]
@@ -91,9 +100,8 @@ impl NttField {
 
 fn default_base_params() -> ProtocolParams {
     ProtocolParams {
-        p: Integer::from(2).pow(32) - 5,
-        // order of secp112r1
-        q: Integer::from_str_radix("db7c2abf62e35e7628dfac6561c5", 16).unwrap(),
+        p: Integer::from(2).pow(64) - 59,
+        q: Integer::from(2).pow(84) - 35,
         ring_v: NttField {
             order: (Integer::from(57) * (Integer::from(2).pow(96))) + 1,
             root: Integer::from_str_radix("2418184924512328812370262861594", 10).unwrap(),

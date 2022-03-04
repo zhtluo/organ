@@ -2,17 +2,19 @@ while IFS= read -r line; do
   IPS+=($line)
 done < $1
 
-bash ./script/run_server.sh ${IPS[0]} &
-for ((i = 1; i <= $(expr ${#IPS[@]} - 1); i++))
-do
-    bash ./script/run_client.sh ${IPS[$i]} $2 $(expr $i - 1) &
-done
-
-wait
-
 for ip in "${IPS[@]}"
 do
-    ssh arch@$ip "killall organ" &
+    ssh -i ~/organ.pem ubuntu@$ip "killall organ" &
+done
+
+for d in ./script/config/*; do
+  for c in ./script/config/$d/*; do
+    bash ./script-ubuntu/run_server.sh ${IPS[0]} $d $c &
+    for ((i = 1; i <= $(expr ${#IPS[@]} - 1); i++)); do
+      bash ./script-ubuntu/run_client.sh ${IPS[$i]} $d $c $(expr $i - 1) &
+    done
+    wait
+  done
 done
 
 wait

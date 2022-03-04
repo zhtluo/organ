@@ -6,7 +6,7 @@ done < $1
 
 for ip in "${IPS[@]}"
 do
-    ssh arch@$ip 'ip address show' | \
+    ssh -i ~/organ.pem ubuntu@$ip 'ip address show' | \
     grep "inet .* brd" | \
     sed 's/ brd.*//g' | \
     sed 's/inet //' | \

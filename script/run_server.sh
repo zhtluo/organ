@@ -1,3 +1,4 @@
-script="RUST_LOG=debug ./organ server 0 ./config.json ./base.txt ./bulk.txt 2> >(tee -a output.log >&2)"
-ssh arch@$1 $script
-scp arch@$1:./output.log ./log/output.log
+script="rm -f ./output.log; RUST_LOG=info ./organ/target/release/organ server 0 ./organ/$2/$3.json ./organ/$2/bits_32_relay.txt ./organ/$2/bits_226_relay.txt 2> >(tee -a output.log >&2)"
+ssh -i ~/organ.pem ubuntu@$1 $script
+mkdir -p ./log/$2/$3/
+scp -i ~/organ.pem ubuntu@$1:./output.log ./log/$2/$3/relay.log

@@ -9,9 +9,9 @@ use crate::net::{async_read_stream, async_write_stream};
 use async_std::channel::{unbounded, Receiver, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use futures::stream::StreamExt;
-use futures::{join, select, FutureExt};
+use futures::{future::join, select, FutureExt};
 use rayon::prelude::*;
-use rug::Integer;
+use rug::{Complete, Integer};
 use std::collections::HashMap;
 
 fn solve_equation(
@@ -19,29 +19,32 @@ fn solve_equation(
     base_prf: &SetupRelay,
     messages: &HashMap<usize, ClientBaseMessage>,
 ) -> Vec<Integer> {
-    let mut relay_messages = Vec::<Integer>::with_capacity(c.base_params.vector_len);
-    for i in 0..c.client_size {
-        let mut relay_msg_of_slot = Integer::from(0);
-        for (_nid, msg) in messages.iter() {
-            relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.base_params.q;
-        }
-        relay_messages.push(relay_msg_of_slot);
-    }
+    debug!("Client messages: {:?}", messages);
+
+    let relay_messages: Vec<Integer> = (0..c.client_size)
+        .into_par_iter()
+        .map(|i| messages.par_iter().map(|(_, b)| &b.slot_messages[i]).sum())
+        .collect();
     debug!("base_relay_messages: {:?}", relay_messages);
 
-    let mut final_equations = Vec::<Integer>::with_capacity(relay_messages.len());
-    for (rmsg, prf) in relay_messages
-        .iter()
-        .zip(base_prf.values.share.scaled.iter())
-    {
-        let val =
-            (Integer::from(rmsg - prf) % &c.base_params.q + &c.base_params.q) % &c.base_params.q;
-        let val_in_grp = val / 1000 % &c.base_params.p;
-        final_equations.push(val_in_grp);
-    }
-    debug!("final_equations: {:?}", final_equations);
+    let final_values: Vec<Integer> = relay_messages
+        .par_iter()
+        .zip(base_prf.values.share.scaled.par_iter())
+        .map(|(rmsg, prf)| {
+            let (_quotient, rem) = Integer::from(rmsg - prf)
+                .div_rem_euc_ref(&c.base_params.q)
+                .complete();
+            rem
+        })
+        .collect();
+    debug!("final_values before rounding: {:?}", final_values);
+    let final_values: Vec<Integer> = final_values
+        .par_iter()
+        .map(|x| (x + Integer::from(1000 / 2)) / 1000 % &c.base_params.p)
+        .collect();
+    debug!("final_values: {:?}", final_values);
 
-    let solve = solve_impl(&c.base_params.p, &final_equations);
+    let solve = solve_impl(&c.base_params.p, &final_values);
     debug!("solve: {:?}", solve);
 
     solve
@@ -52,7 +55,7 @@ pub fn compute_message(
     bulk_prf: &SetupRelay,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
-    let relay_messages: Vec<Integer> = (0..c.bulk_params.vector_len)
+    let relay_messages: Vec<Integer> = (0..c.slot_per_round * c.client_size)
         .into_par_iter()
         .map(|i| {
             let mut relay_msg_of_slot = Integer::from(0);
@@ -82,11 +85,13 @@ pub fn compute_message(
         .par_iter()
         .zip(bulk_prf.values.share.scaled.par_iter())
         .map(|(rmsg, prf)| {
-            let val = (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q)
-                % &c.bulk_params.q;
-            let val_in_grp = val / 1000 % &c.bulk_params.p;
-            val_in_grp
+            (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q
         })
+        .collect();
+    debug!("final_values before rounding: {:?}", final_values);
+    let final_values: Vec<Integer> = final_values
+        .par_iter()
+        .map(|x| (x + Integer::from(1000 / 2)) / 1000 % &c.bulk_params.p)
         .collect();
     debug!("final_values: {:?}", final_values);
 
@@ -101,12 +106,18 @@ async fn handle_connection(
     loop {
         select! {
             read_result = async_read_stream(&mut stream).fuse() => {
-                let msg = read_result.unwrap();
-                channel_read.send(msg).await.unwrap();
+                if read_result.is_ok() {
+                    let msg = read_result.unwrap();
+                    channel_read.send(msg).await.unwrap();
+                }
             }
             write_result = channel_write.recv().fuse() => {
-                let message = write_result.unwrap();
-                async_write_stream(&mut stream, &message).await.unwrap();
+                if write_result.is_ok() {
+                    let message = write_result.unwrap();
+                    if async_write_stream(&mut stream, &message).await.is_err() {
+                        error!("Write error on socket.");
+                    }
+                }
             }
         }
     }
@@ -158,40 +169,34 @@ pub async fn main(c: Config, base_prf: SetupRelay, bulk_prf: SetupRelay) {
     let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
     let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
     let (reactor_output_channel_send, reactor_output_channel_recv) = unbounded::<Vec<u8>>();
-    join!(
-        listener(&c, reactor_input_channel_send, boardcast_channels_send),
-        sender(boardcast_channels_recv, reactor_output_channel_recv),
-        reactor(
+    select!(
+        () = listener(&c, reactor_input_channel_send, boardcast_channels_send).fuse() => {},
+        () = sender(boardcast_channels_recv, reactor_output_channel_recv).fuse() => {},
+        () = reactor(
             &c,
             base_prf,
             bulk_prf,
             reactor_input_channel_recv,
             reactor_output_channel_send
-        ),
+        ).fuse() => {
+            debug!("Main finished.");
+        }
     );
 }
 
-pub async fn main_prifi(c: Config, base_prf: Vec<Integer>, bulk_prf: Vec<Integer>) {
+pub async fn main_prifi(c: Config) {
     let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
     let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
     let (reactor_output_channel_send, reactor_output_channel_recv) = unbounded::<Vec<u8>>();
-    join!(
-        listener(&c, reactor_input_channel_send, boardcast_channels_send),
-        sender(boardcast_channels_recv, reactor_output_channel_recv),
-        reactor_prifi(
-            &c,
-            base_prf,
-            bulk_prf,
-            reactor_input_channel_recv,
-            reactor_output_channel_send
-        ),
+    select!(
+        () = listener(&c, reactor_input_channel_send, boardcast_channels_send).fuse() => {},
+        () = sender(boardcast_channels_recv, reactor_output_channel_recv).fuse() => {},
+        () = reactor_prifi(&c, reactor_input_channel_recv, reactor_output_channel_send).fuse() => {}
     );
 }
 
 pub async fn reactor_prifi(
     c: &Config,
-    base_prf: Vec<Integer>,
-    _bulk_prf: Vec<Integer>,
     reactor_input_channel: Receiver<Vec<u8>>,
     reactor_output_channel: Sender<Vec<u8>>,
 ) {
@@ -211,20 +216,14 @@ pub async fn reactor_prifi(
             }
         }
     };
-    join!(
-        msg_dist(),
-        reactor_prifi_round(
-            c,
-            base_prf,
-            base_input_channel_recv,
-            reactor_output_channel.clone()
-        ),
+    select!(
+        () = msg_dist().fuse() => {},
+        () = reactor_prifi_round(c, base_input_channel_recv, reactor_output_channel.clone()).fuse() => {}
     );
 }
 
 pub async fn reactor_prifi_round(
     c: &Config,
-    _base_prf: Vec<Integer>,
     base_input_channel: Receiver<ClientPrifiMessage>,
     reactor_output_channel: Sender<Vec<u8>>,
 ) {
@@ -232,6 +231,11 @@ pub async fn reactor_prifi_round(
     let mut round: usize = 0;
     loop {
         round += 1;
+        if round > c.round {
+            info!("Base round finished.");
+            async_std::task::sleep(std::time::Duration::from_secs(5)).await;
+            return;
+        }
         info!("Base round {}.", round);
         if base_protocol_buffer.get(&round).is_none() {
             base_protocol_buffer.insert(round, HashMap::new());
@@ -315,9 +319,9 @@ pub async fn reactor(
             }
         }
     };
-    join!(
-        msg_dist(),
-        reactor_base_round(
+    select!(
+        () = msg_dist().fuse() => {},
+        ((), ()) = join(reactor_base_round(
             c,
             base_prf,
             base_input_channel_recv,
@@ -328,7 +332,9 @@ pub async fn reactor(
             bulk_prf,
             bulk_input_channel_recv,
             reactor_output_channel.clone()
-        )
+        )).fuse() => {
+            debug!("Reactor finished.");
+        }
     );
 }
 
@@ -380,6 +386,10 @@ pub async fn reactor_base_round(
     let mut round: usize = 0;
     loop {
         round += 1;
+        if round > c.round {
+            info!("Base round finished.");
+            return;
+        }
         info!("Base round {}.", round);
         if base_protocol_buffer.get(&round).is_none() {
             base_protocol_buffer.insert(round, HashMap::new());
@@ -393,14 +403,16 @@ pub async fn reactor_base_round(
             if base_protocol_buffer.get(&msg.round).is_none() {
                 base_protocol_buffer.insert(msg.round, HashMap::new());
             }
-            if !verify(
-                &c.base_params,
-                &msg.blame,
-                &msg.blame_blinding,
-                &msg.e,
-                &base_prf.qw[msg.nid],
-            ) {
-                warn!("Blame protocol verification failure for {}.", msg.nid);
+            if c.do_blame {
+                if !verify(
+                    &c.base_params,
+                    &msg.blame.as_ref().unwrap(),
+                    &msg.blame_blinding.as_ref().unwrap(),
+                    msg.e.as_ref().unwrap(),
+                    &base_prf.qw.as_ref().unwrap()[msg.nid],
+                ) {
+                    warn!("Blame protocol verification failure for {}.", msg.nid);
+                }
             }
             base_protocol_buffer
                 .get_mut(&msg.round)
@@ -408,24 +420,24 @@ pub async fn reactor_base_round(
                 .insert(msg.nid, msg);
             if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All base messages received. Computing...");
-                /*
-                let mut rand = rug::rand::RandState::new();
-                crate::timing::compute(&crate::timing::CompParameters {
-                    a: std::iter::repeat_with(|| {
-                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                    })
-                    .take(c.base_params.vector_len)
-                    .collect(),
-                    b: std::iter::repeat_with(|| {
-                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                    })
-                    .take(c.base_params.vector_len)
-                    .collect(),
-                    p: c.base_params.p.clone(),
-                    w: c.base_params.ring_v.clone(),
-                    order: c.base_params.q.clone(),
-                });
-                */
+                if c.do_unzip {
+                    let mut rand = rug::rand::RandState::new();
+                    crate::timing::compute(&crate::timing::CompParameters {
+                        a: std::iter::repeat_with(|| {
+                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                        })
+                        .take(c.base_params.vector_len)
+                        .collect(),
+                        b: std::iter::repeat_with(|| {
+                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                        })
+                        .take(c.base_params.vector_len)
+                        .collect(),
+                        p: c.base_params.p.clone(),
+                        w: c.base_params.ring_v.order.clone(),
+                        order: c.base_params.q.clone(),
+                    });
+                }
                 let perm =
                     solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
                 let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
@@ -447,12 +459,17 @@ pub async fn reactor_bulk_round(
     c: &Config,
     bulk_prf: SetupRelay,
     bulk_input_channel: Receiver<ClientBulkMessage>,
-    _reactor_output_channel: Sender<Vec<u8>>,
+    reactor_output_channel: Sender<Vec<u8>>,
 ) {
     let mut bulk_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBulkMessage>>::new();
     let mut round: usize = 0;
     loop {
         round += 1;
+        if round > c.round {
+            info!("Bulk round finished.");
+            async_std::task::sleep(std::time::Duration::from_secs(5)).await;
+            return;
+        }
         info!("Bulk round {}.", round);
         if bulk_protocol_buffer.get(&round).is_none() {
             bulk_protocol_buffer.insert(round, HashMap::new());
@@ -472,25 +489,44 @@ pub async fn reactor_bulk_round(
                 .insert(msg.nid, msg);
             if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All bulk messages received. Computing...");
-                /*
-                let mut rand = rug::rand::RandState::new();
-                crate::timing::compute(&crate::timing::CompParameters {
-                    a: std::iter::repeat_with(|| {
-                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                    })
-                    .take((c.bulk_params.vector_len * c.client_size).next_power_of_two())
-                    .collect(),
-                    b: std::iter::repeat_with(|| {
-                        Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                    })
-                    .take((c.bulk_params.vector_len * c.client_size).next_power_of_two())
-                    .collect(),
-                    p: c.bulk_params.p.clone(),
-                    w: c.bulk_params.ring_v.clone(),
-                    order: c.bulk_params.q.clone(),
-                });
-                */
+                if c.do_unzip {
+                    let mut rand = rug::rand::RandState::new();
+                    crate::timing::compute(&crate::timing::CompParameters {
+                        a: std::iter::repeat_with(|| {
+                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                        })
+                        .take((c.slot_per_round * c.client_size).next_power_of_two())
+                        .collect(),
+                        b: std::iter::repeat_with(|| {
+                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
+                        })
+                        .take((c.slot_per_round * c.client_size).next_power_of_two())
+                        .collect(),
+                        p: c.bulk_params.p.clone(),
+                        w: c.bulk_params.ring_v.order.clone(),
+                        order: c.bulk_params.q.clone(),
+                    });
+                }
                 compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap());
+                if c.do_ping {
+                    info!(
+                        "{}",
+                        std::str::from_utf8(
+                            &std::process::Command::new("ping")
+                                .arg("google.com")
+                                .arg("-c")
+                                .arg("1")
+                                .output()
+                                .unwrap()
+                                .stdout
+                        )
+                        .unwrap()
+                    );
+                }
+                let message = bincode::serialize(&Message::ServerBulkMessage).unwrap();
+                info!("Sending ServerBulkMessage, size = {}...", message.len());
+                reactor_output_channel.send(message).await.unwrap();
+                info!("Sent ServerBulkMessage.");
                 bulk_protocol_buffer.remove(&round);
                 break;
             }
