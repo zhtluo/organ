@@ -7,14 +7,16 @@ do
     ssh -i ~/organ.pem ubuntu@$ip "killall organ" &
 done
 
-for d in ./script/config/*; do
-  for c in ./script/config/$d/*; do
+cd ./script/config/
+for d in *; do
+  for c in $d/*; do
     bash ./script-ubuntu/run_server.sh ${IPS[0]} $d $c &
-    for ((i = 1; i <= $(expr ${#IPS[@]} - 1); i++)); do
+    for ((i = 1; i <= $d; i++)); do
       bash ./script-ubuntu/run_client.sh ${IPS[$i]} $d $c $(expr $i - 1) &
     done
     wait
   done
 done
+cd ../../
 
 wait

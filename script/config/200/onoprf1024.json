@@ -4,4 +4,5 @@
   "slot_per_round": 37,
   "round": 10,
   "do_unzip": true,
+"do_delay": true
 }

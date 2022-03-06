@@ -3,5 +3,6 @@
   "client_size": 100,
   "slot_per_round": 3,
   "round": 10,
-"do_delay": true
+  "do_unzip": true
+
 }

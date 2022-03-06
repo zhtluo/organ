@@ -2,5 +2,6 @@
   "server_addr": "127.0.0.1:8001",
   "client_size": 50,
   "slot_per_round": 3,
-  "round": 10
+  "round": 10,
+"do_delay": true
 }

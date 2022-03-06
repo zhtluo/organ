@@ -3,5 +3,6 @@
   "client_size": 150,
   "slot_per_round": 3,
   "round": 10,
-  "do_ping": true
+  "do_ping": true,
+"do_delay": true
 }
