@@ -35,8 +35,6 @@ cd ../../
 
 wait
 
-'
-
 cd ./script/config/
 # Upload the shares
 for ((i = 0; i <= $(expr ${#UIPS[@]} - 1); i++)); do
@@ -61,3 +59,5 @@ done
 cd ../../
 
 wait
+
+'
