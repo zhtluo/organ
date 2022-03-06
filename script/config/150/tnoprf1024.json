@@ -1,0 +1,7 @@
+{
+  "server_addr": "127.0.0.1:8001",
+  "client_size": 150,
+  "slot_per_round": 37,
+  "round": 100,
+  "do_unzip": true,
+}
