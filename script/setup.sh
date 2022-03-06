@@ -15,7 +15,6 @@ while IFS= read -r line; do
 done < ./log/pvt.txt
 
 
-: '
 # Install the program
 for ((i = 0; i <= $(expr ${#UIPS[@]} - 1); i++)); do
   scp -i ~/organ.pem script/sshd_config ubuntu@${UIPS[$i]}:~/sshd_config &
@@ -23,6 +22,8 @@ for ((i = 0; i <= $(expr ${#UIPS[@]} - 1); i++)); do
 done
 
 wait
+
+: '
 
 # Generate the shares
 cd ./script/config/
@@ -51,12 +52,10 @@ cd ./script/config/
 for d in *; do
   scp -i ~/organ.pem ../../log/$d/bits_32_relay.txt ubuntu@${IPS[0]}:~/organ/log/$d/ &
   scp -i ~/organ.pem ../../log/$d/bits_226_relay.txt ubuntu@${IPS[0]}:~/organ/log/$d/ &
-  scp -i ~/organ.pem ./$d/*.json ubuntu@${IPS[0]}:~/organ/log/$d/ &
   for ((i = 1; i <= $d; i++))
   do
     scp -i ~/organ.pem ../../log/$d/bits_32_nid_$(expr $i - 1).txt ubuntu@${IPS[$i]}:~/organ/log/$d/ &
     scp -i ~/organ.pem ../../log/$d/bits_226_nid_$(expr $i - 1).txt ubuntu@${IPS[$i]}:~/organ/log/$d/ &
-    scp -i ~/organ.pem ./$d/*.json ubuntu@${IPS[$i]}:~/organ/log/$d/ &
   done
 done
 cd ../../
