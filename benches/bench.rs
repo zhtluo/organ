@@ -134,12 +134,12 @@ pub fn criterion_benchmark_compute_prf_base(cr: &mut Criterion) {
                     a: std::iter::repeat_with(|| {
                         Integer::from(c.base_params.p.random_below_ref(&mut rand))
                     })
-                    .take((c.slot_per_round * c.client_size).next_power_of_two())
+                    .take((c.slot_per_round * size).next_power_of_two())
                     .collect(),
                     b: std::iter::repeat_with(|| {
                         Integer::from(c.base_params.p.random_below_ref(&mut rand))
                     })
-                    .take((c.slot_per_round * c.client_size).next_power_of_two())
+                    .take((c.slot_per_round * size).next_power_of_two())
                     .collect(),
                     p: c.bulk_params.p.clone(),
                     w: c.bulk_params.ring_v.order.clone(),
@@ -151,6 +151,5 @@ pub fn criterion_benchmark_compute_prf_base(cr: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, criterion_benchmark_compute_prf_bulk);
-criterion_group!(benches, criterion_benchmark_compute_prf_base);
+criterion_group!(benches, criterion_benchmark_compute_prf_bulk, criterion_benchmark_compute_prf_base);
 criterion_main!(benches);
