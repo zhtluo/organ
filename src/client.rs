@@ -211,6 +211,9 @@ pub fn main_prifi(c: Config, nid: usize) {
                 cipher: message_enc,
             }))
             .unwrap();
+            if c.do_delay && nid == 0 {
+                std::thread::sleep(std::time::Duration::from_secs(2))
+            }
             info!("Sending ClientPrifiMessage, size = {}...", message.len());
             write_stream(&mut socket, &message).unwrap();
             info!("Sent ClientPrifiMessage.");

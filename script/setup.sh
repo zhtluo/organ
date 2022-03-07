@@ -23,6 +23,7 @@ done
 
 wait
 
+: '
 # Generate the shares
 cd ./script/config/
 for d in *; do
@@ -57,3 +58,4 @@ done
 cd ../../
 
 wait
+'
