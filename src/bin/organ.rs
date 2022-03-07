@@ -45,7 +45,7 @@ fn generate_prf(path: &str, client_size: usize, params: &config::ProtocolParams,
 async fn main() {
     let args: Vec<String> = env::args().collect();
     env_logger::builder()
-        .format_timestamp(Some(env_logger::TimestampPrecision::Millis))
+        .format_timestamp(Some(env_logger::TimestampPrecision::Micros))
         .init();
     info!("Starting up...");
     debug!("args: {:?}", args);

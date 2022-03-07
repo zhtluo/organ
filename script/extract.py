@@ -2,7 +2,6 @@ import re
 import sys
 import time
 
-print("Config: {}".format(sys.argv[1]))
 with open(sys.argv[1], 'r') as f:
     s = f.read()
     avg = 0
@@ -14,7 +13,7 @@ with open(sys.argv[1], 'r') as f:
             int(m.group(7)) + int(m.group(8)) / 1000
         avg += (time2 - time1)
     avg /= 10
-    print("Base round optimal: {}s.".format(round(avg, 3)))
+    print("{} ".format(round(avg, 3)), end = "")
     avg = 0
     mm = re.finditer(r'\[.*([0-9]{2,2}):([0-9]{2,2}):([0-9]{2,2})\.([0-9]{2,3})Z INFO  organ::client\] Sent ClientBulkMessage.\n\[.*([0-9]{2,2}):([0-9]{2,2}):([0-9]{2,2})\.([0-9]{2,3})Z INFO  organ::client\] Received ServerBulkMessage', s)
     for m in mm:
@@ -24,4 +23,4 @@ with open(sys.argv[1], 'r') as f:
             int(m.group(7)) + int(m.group(8)) / 1000
         avg += (time2 - time1)
     avg /= 10
-    print("Bulk round optimal: {}s.".format(round(avg, 3)))
+    print("{}".format(round(avg, 3)))
