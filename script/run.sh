@@ -7,6 +7,8 @@ do
     ssh -i ~/organ.pem ubuntu@$ip "killall organ" &
 done
 
+wait
+
 cd ./script/config/
 for d in *; do
   for c in $d/*; do
