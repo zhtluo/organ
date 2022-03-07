@@ -186,7 +186,7 @@ pub fn main_prifi(c: Config, nid: usize) {
         if round < c.round {
             round += 1;
             info!("Round {}.", round);
-            let nbits: usize = 1024 * 8;
+            let nbits: usize = c.slot_per_round * 8;
             let nguards: usize = 10;
             let mut rand = rug::rand::RandState::new();
             let prgs: Vec<Integer> = std::iter::repeat_with(|| {

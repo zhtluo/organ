@@ -255,7 +255,7 @@ pub async fn reactor_prifi_round(
                 .insert(msg.nid, msg);
             if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
                 info!("All prifi messages received. Computing...");
-                let nbits: usize = 1024 * 8;
+                let nbits: usize = c.slot_per_round * 8;
                 let nguards: usize = 10;
                 let mut rand = rug::rand::RandState::new();
                 let prgs: Vec<Integer> = std::iter::repeat_with(|| {
