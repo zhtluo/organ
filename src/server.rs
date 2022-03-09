@@ -281,6 +281,19 @@ pub async fn reactor_prifi_round(
                     }
                     xored_val ^= xored_prg;
                 }
+                info!(
+                    "{}",
+                    std::str::from_utf8(
+                        &std::process::Command::new("ping")
+                            .arg("google.com")
+                            .arg("-c")
+                            .arg("1")
+                            .output()
+                            .unwrap()
+                            .stdout
+                    )
+                    .unwrap()
+                );
                 let message = bincode::serialize(&Message::Ok).unwrap();
                 info!("Sending Server Ok Message, size = {}...", message.len());
                 reactor_output_channel.send(message).await.unwrap();
