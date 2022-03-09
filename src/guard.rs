@@ -176,7 +176,6 @@ pub fn gen_setup_relay(
                 Some(acc.clone())
             }))
             .collect();
-        debug!("gamma: {:?}", gamma_inverse);
         info!("Computing omega...");
         let omega_inverse: Vec<Integer> = std::iter::once(Integer::from(1))
             .chain((0..params.vector_len).scan(Integer::from(1), |acc, _| {
@@ -215,6 +214,7 @@ pub fn gen_setup_relay(
                 )
             })
             .collect();
+        debug!("d = {:?}", d);
         info!("Computing d_...");
         let d_blinding: Vec<Vec<Integer>> = (0..client_values.len())
             .into_par_iter()

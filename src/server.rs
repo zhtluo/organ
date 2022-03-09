@@ -14,7 +14,7 @@ use rayon::prelude::*;
 use rug::{Complete, Integer};
 use std::collections::HashMap;
 
-fn solve_equation(
+pub fn solve_equation(
     c: &Config,
     base_prf: &SetupRelay,
     messages: &HashMap<usize, ClientBaseMessage>,

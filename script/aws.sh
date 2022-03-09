@@ -1,3 +1,4 @@
+rm -rf organ
 git clone https://github.com/zhtluo/organ.git
 cd organ
 git pull

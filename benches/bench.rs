@@ -6,14 +6,17 @@ use organ::config::*;
 use organ::*;
 use rug::ops::Pow;
 use rug::Integer;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
 
-fn get_config(slot: usize) -> config::Config {
+fn get_config(client_size: usize, slot: usize) -> config::Config {
     config::Config {
         server_addr: std::net::SocketAddr::new(
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
             0,
         ),
-        client_size: 200,
+        client_size: client_size,
         base_params: ProtocolParams {
             p: Integer::from(2).pow(64) - 59,
             q: Integer::from(2).pow(84) - 35,
@@ -54,89 +57,102 @@ fn get_config(slot: usize) -> config::Config {
     }
 }
 
-fn timing_base(c: &config::Config, size: usize) {
-    let mut rand = rug::rand::RandState::new();
-    crate::timing::compute(&crate::timing::CompParameters {
-        a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
-            .take((c.slot_per_round * size).next_power_of_two())
-            .collect(),
-        b: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
-            .take((c.slot_per_round * size).next_power_of_two())
-            .collect(),
-        p: c.bulk_params.p.clone(),
-        w: c.bulk_params.ring_v.order.clone(),
-        order: c.bulk_params.q.clone(),
-    });
+fn get_setup_relay(
+    client_size: usize,
+    params: &ProtocolParams,
+) -> (Vec<guard::SetupValues>, guard::SetupRelay) {
+    let shares: Vec<Vec<Integer>> = (0..params.vector_len)
+        .map(|_| guard::generate_sum_shares(client_size, &params.ring_v.order, &Integer::from(1)))
+        .collect();
+    let shares: Vec<Vec<Integer>> = (0..client_size)
+        .map(|i| shares.iter().map(|v| v[i].clone()).collect())
+        .collect();
+    let setup_values: Vec<guard::SetupValues> = (0..client_size)
+        .map(|i| guard::gen_setup_values(&params, &shares[i], false))
+        .collect();
+    let setup_relay = guard::gen_setup_relay(&params, &setup_values, false);
+
+    (setup_values, setup_relay)
 }
 
-fn timing_bulk(c: &config::Config, size: usize) {
-    let mut rand = rug::rand::RandState::new();
-    crate::timing::compute(&crate::timing::CompParameters {
-        a: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
-            .take((c.slot_per_round * size).next_power_of_two())
-            .collect(),
-        b: std::iter::repeat_with(|| Integer::from(c.base_params.p.random_below_ref(&mut rand)))
-            .take((c.slot_per_round * size).next_power_of_two())
-            .collect(),
-        p: c.bulk_params.p.clone(),
-        w: c.bulk_params.ring_v.order.clone(),
-        order: c.bulk_params.q.clone(),
-    });
-}
-
-pub fn criterion_benchmark_compute_prf_bulk(cr: &mut Criterion) {
-    let c = get_config(3);
-    let mut group = cr.benchmark_group("compute_prf_bulk_58");
+pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
+    let mut group = cr.benchmark_group("solve_eq_single");
     for size in [50, 100, 150, 200].iter() {
+        let c = get_config(*size, 3);
+        let (sv, sr) = get_setup_relay(*size, &c.base_params);
+        let mut messages =
+            std::collections::HashMap::<usize, crate::message::ClientBaseMessage>::new();
+        for i in 0..*size {
+            messages.insert(
+                i,
+                message::ClientBaseMessage {
+                    round: 0,
+                    nid: i,
+                    slot_messages: client::generate_client_base_message(
+                        &c,
+                        &sv[i].share.scaled,
+                        &Integer::from(i),
+                    ),
+                    blame: None,
+                    blame_blinding: None,
+                    e: None,
+                },
+            );
+        }
+        group.throughput(Throughput::Bytes(*size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &_size| {
+            b.iter(|| server::solve_equation(&c, &sr, &messages));
+        });
+    }
+    group.finish();
+    let mut group = cr.benchmark_group("solve_eq_multi");
+    for size in [50, 100, 150, 200].iter() {
+        let c = get_config(*size, 3);
+        let (sv, sr) = get_setup_relay(*size, &c.base_params);
+        let mut messages =
+            std::collections::HashMap::<usize, crate::message::ClientBaseMessage>::new();
+        for i in 0..*size {
+            messages.insert(
+                i,
+                message::ClientBaseMessage {
+                    round: 0,
+                    nid: i,
+                    slot_messages: client::generate_client_base_message(
+                        &c,
+                        &sv[i].share.scaled,
+                        &Integer::from(i),
+                    ),
+                    blame: None,
+                    blame_blinding: None,
+                    e: None,
+                },
+            );
+        }
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             b.iter(|| {
-                timing_bulk(&c, size);
+                let c = get_config(size, 3);
+                const NTHREADS: u32 = 100;
+                let mut children = vec![];
+                let (tx, rx) = mpsc::channel();
+                let param_arc = Arc::new((c, sr.clone(), messages.clone()));
+                for _ in 0..NTHREADS {
+                    let txc = tx.clone();
+                    let paramc = Arc::clone(&param_arc);
+                    children.push(thread::spawn(move || {
+                        txc.send(server::solve_equation(&paramc.0, &paramc.1, &paramc.2))
+                            .unwrap();
+                    }));
+                }
+                for _ in 0..NTHREADS {
+                    rx.recv().unwrap();
+                }
             });
         });
     }
     group.finish();
-    let c = get_config(37);
-    let mut group = cr.benchmark_group("compute_prf_bulk_1024");
-    for size in [50, 100, 150, 200].iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.iter(|| {
-                timing_bulk(&c, size);
-            });
-        });
-    }
-    group.finish();
 }
 
-pub fn criterion_benchmark_compute_prf_base(cr: &mut Criterion) {
-    let c = get_config(3);
-    let mut group = cr.benchmark_group("compute_prf_base_58");
-    for size in [50, 100, 150, 200].iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.iter(|| {
-                timing_base(&c, size);
-            })
-        });
-    }
-    group.finish();
-    let c = get_config(37);
-    let mut group = cr.benchmark_group("compute_prf_base_1024");
-    for size in [50, 100, 150, 200].iter() {
-        group.throughput(Throughput::Bytes(*size as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.iter(|| {
-                timing_base(&c, size);
-            })
-        });
-    }
-    group.finish();
-}
+criterion_group!(benches, criterion_benchmark_solve_eq);
 
-criterion_group!(
-    benches,
-    criterion_benchmark_compute_prf_bulk,
-    criterion_benchmark_compute_prf_base
-);
 criterion_main!(benches);

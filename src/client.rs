@@ -5,7 +5,7 @@ use crate::net::{read_stream, write_stream};
 use rug::Integer;
 use std::net::TcpStream;
 
-fn generate_client_base_message(
+pub fn generate_client_base_message(
     c: &Config,
     prf: &Vec<Integer>,
     message_ele: &Integer,

@@ -6,9 +6,11 @@ done < $1
 
 UIPS=($(echo "${IPS[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
+echo ${IPS[*]}
+
 echo ${UIPS[*]} > ./log/uip.txt
 
-# bash ./script/get_pvt_ip.sh $1 > ./log/pvt.txt
+bash ./script/get_pvt_ip.sh $1 > ./log/pvt.txt
 
 while IFS= read -r line; do
   PIPS+=($line)
@@ -23,7 +25,6 @@ done
 
 wait
 
-: '
 # Generate the shares
 cd ./script/config/
 for d in *; do
@@ -58,4 +59,4 @@ done
 cd ../../
 
 wait
-'
+
