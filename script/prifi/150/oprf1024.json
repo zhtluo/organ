@@ -1,0 +1,7 @@
+{
+  "server_addr": "172.31.14.151:8001",
+  "client_size": 150,
+  "slot_per_round": 37,
+  "round": 10,
+"do_delay": true
+}
