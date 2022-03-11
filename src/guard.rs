@@ -1,5 +1,5 @@
 use crate::config::ProtocolParams;
-use crate::ecc::{add, get_g, get_h, mul, new_big_num_context, to_bytes};
+use crate::ecc::{add, get_g, get_h, get_order, mul, new_big_num_context, to_bytes};
 use openssl::ec::EcPoint;
 use rayon::prelude::*;
 use rug::{Complete, Integer};
@@ -123,6 +123,7 @@ pub fn gen_setup_values(
 
 fn compute_d(
     order: &Integer,
+    tau: &Integer,
     _gamma: &Vec<Integer>,
     omega: &Vec<Integer>,
     omega_len: &Vec<Integer>,
@@ -146,7 +147,7 @@ fn compute_d(
                     .complete(),
             ) - &product[j];
             assert_eq!(Integer::from(&val % order), Integer::from(0));
-            val / order
+            val / order % tau
         })
         .collect()
 }
@@ -206,6 +207,7 @@ pub fn gen_setup_relay(
             .map(|i| {
                 compute_d(
                     &params.ring_v.order,
+                    &get_order(&params),
                     &gamma_inverse,
                     &omega_inverse,
                     &omega_len_inverse,
@@ -221,6 +223,7 @@ pub fn gen_setup_relay(
             .map(|i| {
                 compute_d(
                     &params.ring_v.order,
+                    &get_order(&params),
                     &gamma_inverse,
                     &omega_inverse,
                     &omega_len_inverse,

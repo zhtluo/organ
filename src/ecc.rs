@@ -34,12 +34,10 @@ pub fn from_bytes(params: &crate::config::ProtocolParams, buf: &[u8]) -> EcPoint
     EcPoint::from_bytes(&params.group.as_ref().unwrap(), buf, &mut new_big_num_context()).unwrap()
 }
 
-pub fn get_order() -> Integer {
-    Integer::from_str_radix(
-        "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
-        16,
-    )
-    .unwrap()
+pub fn get_order(params: &crate::config::ProtocolParams) -> Integer {
+    let mut ret = BigNum::new().unwrap();
+    params.group.as_ref().unwrap().order(&mut ret, &mut new_big_num_context()).unwrap();
+    Integer::from_digits(&ret.to_vec(), Order::Msf)
 }
 
 pub fn to_scalar(x: &Integer) -> BigNum {
