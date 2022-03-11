@@ -147,7 +147,7 @@ fn compute_d(
                     .complete(),
             ) - &product[j];
             assert_eq!(Integer::from(&val % order), Integer::from(0));
-            val / order % tau
+            val * Integer::from(order.invert_ref(tau).unwrap()) % tau
         })
         .collect()
 }
