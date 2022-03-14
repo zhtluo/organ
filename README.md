@@ -1,6 +1,6 @@
 # organ
 
-This is a prototype implementation for the paper "OrgAn: Organizational Anonymity with Low Latency".
+This is a prototype implementation for the paper 'OrgAn: Organizational Anonymity with Low Latency'.
 
 ## Steps to run a local setup and test
 
@@ -13,6 +13,8 @@ This is a prototype implementation for the paper "OrgAn: Organizational Anonymit
 ## Steps to repeat the experiment
 
 - Set up VPSs and dump their IP into a `txt` file, one per line with the first as relay.
+
+- The script uses `~/organ.pem` as the SSH keypair. Modify if you want to use something else.
 
 - Run `./script/setup.sh <Your IP file>` to build the prototype on each of the machine. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
 

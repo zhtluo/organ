@@ -8,5 +8,6 @@ bash install-rust.sh -y
 source $HOME/.cargo/env
 cargo build --release
 
-sudo mv /home/ubuntu/sshd_config /etc/ssh/sshd_config
-sudo systemctl restart ssh
+# Use new SSH config. Enable if needed.
+# sudo mv /home/ubuntu/sshd_config /etc/ssh/sshd_config
+# sudo systemctl restart ssh

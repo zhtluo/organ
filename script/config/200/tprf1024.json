@@ -1,5 +1,5 @@
 {
-  "server_addr": "172.31.14.151:8001",
+  "server_addr": "127.0.0.1:8001",
   "client_size": 200,
   "slot_per_round": 37,
   "round": 100

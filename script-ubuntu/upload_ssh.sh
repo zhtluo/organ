@@ -1,1 +1,0 @@
-scp -i ~/organ.pem ./$2/bits_32_nid_$3.txt ubuntu@$1:./base_$3.txt
