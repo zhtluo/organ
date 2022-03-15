@@ -22,7 +22,7 @@ for d in r*.json; do
   echo
 done
 echo "Average round time (in seconds, both base and bulk round):"
-for d in t*.json; do 
+for d in a*.json; do 
   cd ../../../
   echo $d
   for e in 5; do
