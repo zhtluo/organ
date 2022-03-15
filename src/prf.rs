@@ -2,6 +2,7 @@ use rayon::prelude::*;
 use rug::Integer;
 use rug_fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
 
+/// Compute PRF on demand.
 pub fn compute(
     params: &crate::config::ProtocolParams,
     prf: &crate::guard::SetupValues,

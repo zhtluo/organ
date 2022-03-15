@@ -36,6 +36,7 @@ pub enum Setup {
     SetupRelay(SetupRelay),
 }
 
+/// Generate all shares for the nodes so that they sum up to `sum`.
 pub fn generate_sum_shares(n: usize, modulus: &Integer, sum: &Integer) -> Vec<Integer> {
     let mut rand = rug::rand::RandState::new();
     let mut shares: Vec<Integer> =
@@ -50,6 +51,7 @@ pub fn generate_sum_shares(n: usize, modulus: &Integer, sum: &Integer) -> Vec<In
     shares
 }
 
+/// Compute the hash for the PRF.
 pub fn compute_hash(slot_number: usize, vec_length: usize, ring_v: &Integer) -> Vec<Integer> {
     (0..vec_length)
         .map(|i| {
@@ -61,6 +63,7 @@ pub fn compute_hash(slot_number: usize, vec_length: usize, ring_v: &Integer) -> 
         .collect()
 }
 
+/// Generate setup values for one round. (base or bulk)
 pub fn gen_setup_vector(params: &ProtocolParams, mut shares: Vec<Integer>) -> SetupVector {
     let mut result: SetupVector = SetupVector::default();
     let mut hash_vector = compute_hash(0, params.vector_len, &params.ring_v.order);
@@ -90,6 +93,7 @@ pub fn gen_setup_vector(params: &ProtocolParams, mut shares: Vec<Integer>) -> Se
     result
 }
 
+/// Generate setup values for one full round. (base and bulk)
 pub fn gen_setup_values(
     params: &ProtocolParams,
     shares: &Vec<Integer>,
@@ -121,6 +125,7 @@ pub fn gen_setup_values(
     }
 }
 
+/// Generate values for the relay to verify in the blame protocol.
 fn compute_d(
     order: &Integer,
     tau: &Integer,
@@ -136,11 +141,14 @@ fn compute_d(
         .map(|j| {
             let val = Integer::from(
                 Integer::from(product_ntt.len()).invert(order).unwrap()
-                //    * &gamma[j]
                     * Integer::sum(
                         (0..product_ntt.len())
                             .into_par_iter()
-                            .map(|k| Integer::from(&product_ntt[k] * &omega_len[j * k / product_ntt.len()]) * &omega[j * k % product_ntt.len()])
+                            .map(|k| {
+                                Integer::from(
+                                    &product_ntt[k] * &omega_len[j * k / product_ntt.len()],
+                                ) * &omega[j * k % product_ntt.len()]
+                            })
                             .collect::<Vec<_>>()
                             .iter(),
                     )
@@ -152,6 +160,7 @@ fn compute_d(
         .collect()
 }
 
+/// Generate setup values for the relay.
 pub fn gen_setup_relay(
     params: &ProtocolParams,
     client_values: &Vec<SetupValues>,

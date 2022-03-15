@@ -1,6 +1,8 @@
 use rug::Integer;
 use std::mem::{transmute, MaybeUninit};
 
+// An implementation in flint to solve the Newton Power equation.
+
 pub fn fmpz_to_int(p: *const flint_sys::fmpz::fmpz) -> rug::Integer {
     unsafe {
         let mut res = rug::Integer::new();

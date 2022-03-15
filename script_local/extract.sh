@@ -1,7 +1,7 @@
 cd "${0%/*}"
 cd ..
 cd ./log/local/5
-echo "Optimal round trip time (s, base round and bulk round respectively):"
+echo "Optimal round trip time (in seconds, base round and bulk round respectively):"
 for d in o*.json; do 
   cd ../../../
   echo $d
@@ -11,7 +11,7 @@ for d in o*.json; do
   cd ./log/local/5
   echo
 done
-echo "Round trip time (s, base round and bulk round respectively):"
+echo "Round trip time (in seconds, base round and bulk round respectively):"
 for d in r*.json; do 
   cd ../../../
   echo $d
@@ -21,7 +21,7 @@ for d in r*.json; do
   cd ./log/local/5
   echo
 done
-echo "Average round time (s, both base and bulk round):"
+echo "Average round time (in seconds, both base and bulk round):"
 for d in t*.json; do 
   cd ../../../
   echo $d

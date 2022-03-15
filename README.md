@@ -6,18 +6,20 @@ This is a prototype implementation for the paper 'OrgAn: Organizational Anonymit
 
 - Make sure that you have Rust installed. (`https://www.rust-lang.org/`)
 
-- Run `cargo build --release` to build the prototype.
+- Clone the directory with `git clone https://github.com/zhtluo/organ.git`.
 
-- Use `./script_local/test.sh` to start a test run. The config file is located at `./script_local/config.json`.
+- Get into the directory with `cd organ` and use `cargo build --release` to build the prototype.
 
-This will generate the secrets as one guard server, and then launch the specified number of nodes (1 relay + 5 clients by default) to simulate the exchange of the base round and the bulk round under different settings locally to measure the performance. The settings can be checked under `./script_local/config`, and the log will be dumped to `./log/local`.
+- Use `./script_local/test.sh` to start a test run.
+
+This will generate the secrets as one guard server and output them to `./log/local`, and then launch the specified number of processes (1 relay + 5 clients by default) to simulate the exchange of the base round and the bulk round under different configs locally to measure the performance. The configs can be checked under `./script_local/config`, and the log, containing details and timestamps on each round, will be dumped to `./log/local/<setting name>/`.
 
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script_local/extract.sh`.
 
 Run this script will yield a result like:
 
 ```
-Optimal round trip time (s, base round and bulk round respectively):
+Optimal round trip time (in seconds, base round and bulk round respectively):
 onoprf58.json
 0.01 0.066
 
@@ -27,7 +29,7 @@ oprf1024.json
 oprf58.json
 0.015 0.014
 
-Round trip time (s, base round and bulk round respectively):
+Round trip time (in seconds, base round and bulk round respectively):
 rnoprf58.json
 0.035 0.125
 
@@ -37,7 +39,7 @@ rprf1024.json
 rprf58.json
 0.012 0.01
 
-Average round time (s, both base and bulk round):
+Average round time (in seconds, both base and bulk round):
 tnoprf1024.json
 0.26
 

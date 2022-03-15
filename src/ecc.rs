@@ -2,6 +2,8 @@ use rug::{integer::Order, Integer};
 use openssl::{bn::{BigNum, BigNumContext}, ec::{EcPoint, EcPointRef, PointConversionForm}};
 use num_traits::Signed;
 
+// Helper functions for ECC operations.
+
 pub fn new_big_num_context() -> BigNumContext {
     BigNumContext::new().unwrap()
 }

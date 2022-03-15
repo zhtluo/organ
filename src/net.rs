@@ -2,6 +2,8 @@ use async_std::io::{ReadExt as AsyncRead, WriteExt as AsyncWrite};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
+// Network helpers to wrap message.
+
 pub fn read_stream(stream: &mut TcpStream) -> Result<Vec<u8>, ()> {
     let mut len_buf: [u8; 8] = [0; 8];
     if stream.read_exact(&mut len_buf).is_err() {

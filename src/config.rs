@@ -5,6 +5,7 @@ use rug::Integer;
 use serde::{Deserialize, Serialize};
 use std::net::{AddrParseError, SocketAddr};
 
+/// Protocol parameters for one round. (base or bulk)
 #[derive(Serialize, Deserialize)]
 pub struct ProtocolParams {
     pub p: Integer,
@@ -17,12 +18,7 @@ pub struct ProtocolParams {
     pub group: Option<EcGroup>,
 }
 
-#[derive(Clone, Debug)]
-pub struct SlotParams {
-    pub fragments: usize,
-    pub slot_number: usize,
-}
-
+/// Config for the protocol.
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub server_addr: SocketAddr,
@@ -108,7 +104,7 @@ fn default_base_params() -> ProtocolParams {
             scale: Integer::from(2).pow(96),
         },
         vector_len: 2048,
-        bits: 32,
+        bits: 64,
         group_nid: Nid::SECP256K1.as_raw(),
         group: Some(EcGroup::from_curve_name(Nid::SECP256K1).unwrap()),
     }
