@@ -1,6 +1,11 @@
 # organ
 
-This is a prototype implementation for the paper 'OrgAn: Organizational Anonymity with Low Latency'.
+This is a prototype implementation of the OrgAn protocol proposed in the paper 'OrgAn: Organizational Anonymity with Low Latency'. 
+The protocol follows a server/relay/client model, where the setup server provides secret shares of a publicly known value to the clients. The clients in the organisation communicate anonymously through the relay with the outside world. The communication proceeds in `Base` and `Bulk` rounds. The clients use `Base` round for slot selection and `Bulk` round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key homomorphic PRF output. 
+
+The random value chosen for slot selection is `64` bits. For each slot of a particular bulk round, a client can forward  `226` bits of message.  
+
+
 
 ## Steps to run a local setup and test
 
