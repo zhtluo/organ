@@ -9,6 +9,12 @@ The clients use Base round for slot selection and Bulk round to forward their me
 
 - Make sure that you have Rust installed. (`https://www.rust-lang.org/`)
 
+- Install dependencies with:
+
+```
+sudo apt install libgmp-dev libmpfr-dev libflint-dev
+```
+
 - Clone the repository using `git clone https://github.com/zhtluo/organ.git`.
 
 - Change directory with `cd organ` and use `cargo build --release` to build the prototype.
