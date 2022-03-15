@@ -17,7 +17,7 @@ The clients use Base round for slot selection and Bulk round to forward their me
 
 The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
-## Configuration and Output Logs
+## Configuration and output logs
 
 For the local tests, the protocol configuration is specified in `./script_local/config`, and the log, including timestamps on each round, is dumped to `./log/local/<setting name>/`.
 
@@ -63,7 +63,7 @@ The name of each config file explains the actual setting the experiment is perfo
 
 - The scripts (eg: `run.sh`, `setup.sh`) from the folder `scripts` use an `~/organ.pem` as the SSH keypair to access the AWS machines. Modify it to reflect your keys.
 
-- Run `./script/setup.sh <Your IP address filename.txt>` to build the prototype on each of the machine. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
+- Run `./script/setup.sh <Your IP address filename.txt>` to build the prototype on each of the machines. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
 
 - Run `./script/run.sh <Your IP address filename.txt>` to run all the tests and fetch the log under `./log/`.
 
