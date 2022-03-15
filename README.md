@@ -15,7 +15,7 @@ The clients use Base round for slot selection and Bulk round to forward their me
 
 - Use `./script_local/test.sh` to start a test-run.
 
-The default local test run launches one guard which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
+The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
 ## Configuration
 
