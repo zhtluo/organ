@@ -59,13 +59,13 @@ The name of each config file explains the actual setting the experiment is perfo
 
 ## Steps to repeat the benchmarks reported in the paper
 
-- Set up AWS and add the node IPs into a `.txt` file, one per line with the first IP being the IP of the relay node.
+- Set up AWS and add the node IPs into a `<Your IP address filename.txt>` file, one per line with the first IP being the IP of the relay node.
 
-- The scripts (eg: `run.sh`, `setup.sh`)from the folder `scripts` use an `~/organ.pem` as the SSH keypair to access the AWS machines. Modify if you want to use something else.
+- The scripts (eg: `run.sh`, `setup.sh`) from the folder `scripts` use an `~/organ.pem` as the SSH keypair to access the AWS machines. Modify it to reflect your keys.
 
-- Run `./script/setup.sh <Your IP file>` to build the prototype on each of the machine. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
+- Run `./script/setup.sh <Your IP address filename.txt>` to build the prototype on each of the machine. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
 
-- Run `./script/run.sh <Your IP file>` to run all the tests and fetch the log under `./log/`.
+- Run `./script/run.sh <Your IP address filename.txt>` to run all the tests and fetch the log under `./log/`.
 
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script/extract.sh`.
 
