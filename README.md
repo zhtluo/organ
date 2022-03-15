@@ -1,23 +1,23 @@
-# OrgAn
+# OrgAn: Organizational Anonymity with Low Latency
 
 This is a prototype implementation of the OrgAn protocol proposed in the paper 'OrgAn: Organizational Anonymity with Low Latency'. 
-The protocol follows a client/relay/server/relay model, where the setup server provides secret shares of a publicly known value to the clients. The clients in the organisation communicate anonymously through the relay with the outside world. The communication proceeds in `Base` and `Bulk` rounds. The clients use `Base` round for slot selection and `Bulk` round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key homomorphic PRF output. 
+The protocol follows a client/relay/server model, where the setup server provides secret shares of a publicly known value to the clients. The clients in the organisation communicate anonymously through the relay with the outside world. The communication proceeds in `Base` and `Bulk` rounds. 
 
-The relay collects all the messages from all the clients in a `Base` round, computes the Newton's sum equation system and solves it to obtain a random permutation of client input values. This permutation is used to select slots in the `Bulk` round. 
-
-The random value chosen for slot selection is `64` bits. For each slot of a particular bulk round, a client can forward `226` bits of message.  
+The clients use Base round for slot selection and Bulk round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key-homomorphic PRF output. The relay collects all the messages from all the clients in a Base round, computes the Newton's sum equation system and solves it to obtain a random permutation of client input values. This permutation is used to select slots in the Bulk round. Clients choose a `64` bit random value for slot selection in the Base round. In the Bulk round, a client can forward `226` bits of message per allotted slot.  
 
 ## Local setup and test
 
 - Make sure that you have Rust installed. (`https://www.rust-lang.org/`)
 
-- Clone the directory with `git clone https://github.com/zhtluo/organ.git`.
+- Clone the repository using `git clone https://github.com/zhtluo/organ.git`.
 
-- Get into the directory with `cd organ` and use `cargo build --release` to build the prototype.
+- Change directory with `cd organ` and use `cargo build --release` to build the prototype.
 
-- Use `./script_local/test.sh` to start a test run.
+- Use `./script_local/test.sh` to start a test-run.
 
-This will generate the secrets as one guard server and output them to `./log/local`, and then launch the specified number of processes (1 relay + 5 clients by default) to simulate the exchange of the base round and the bulk round under different configs locally to measure the performance. The configs can be checked under `./script_local/config`, and the log, containing details and timestamps on each round, will be dumped to `./log/local/<setting name>/`.
+The default local test run launches one guard which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
+
+The network configuration is specified in `./script_local/config`, and the log, including timestamps on each round, is dumped to `./log/local/<setting name>/`.
 
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script_local/extract.sh`.
 
