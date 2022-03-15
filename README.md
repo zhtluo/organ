@@ -3,6 +3,8 @@
 This is a prototype implementation of the OrgAn protocol proposed in the paper 'OrgAn: Organizational Anonymity with Low Latency'. 
 The protocol follows a client/relay/server/relay model, where the setup server provides secret shares of a publicly known value to the clients. The clients in the organisation communicate anonymously through the relay with the outside world. The communication proceeds in `Base` and `Bulk` rounds. The clients use `Base` round for slot selection and `Bulk` round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key homomorphic PRF output. 
 
+The relay collects all the messages from all the clients in a Base round, computes the Newton's sum equation system and solves it to obtain a random permutation of client input values. This permutation is used to select slots in the Bulk round. 
+
 The random value chosen for slot selection is `64` bits. For each slot of a particular bulk round, a client can forward  `226` bits of message.  
 
 
