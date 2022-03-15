@@ -15,7 +15,7 @@ The clients use Base round for slot selection and Bulk round to forward their me
 
 - Use `./script_local/test.sh` to start a test-run.
 
-The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
+The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the Base round and the Bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
 ## Configuration and output logs
 
@@ -141,10 +141,10 @@ The configuration `.json` files of local test `./script_local/config` or AWS net
 
 1. `server_addr`: The address of the relay and the port used. **Must be included.**
 1. `client_size`: The number of clients. **Must be included.**
-1. `base_params`: The parameters for the base round, including `p`, `q`, `v`, the length of the vector in the communication `vector_len`, number of bits per round `bits`, and the ECC group id for the blame protocol as specified by OpenSSL `group_nid`. If omitted, the default value will be used.
-1. `bulk_params`: The parameters for the bulk round, same as the base round. If omitted, the default value will be used.
+1. `base_params`: The parameters for the Base round, including `p`, `q`, `v`, the length of the vector in the communication `vector_len`, number of bits per round `bits`, and the ECC group id for the blame protocol as specified by OpenSSL `group_nid`. If omitted, the default value will be used.
+1. `bulk_params`: The parameters for the Bulk round, same as the base round. If omitted, the default value will be used.
 1. `round`: The total number of rounds to run. **Must be included.**
-1. `slot_per_round`: How many slots does each client use per bulk round. **Must be included.**
+1. `slot_per_round`: How many slots does each client use per bulk round. This is the total message length divided by 226 (rounded to the next integer). **Must be included.** 
 1. `do_blame`: Whether or not to test blame protocol by running it every round. Defaults to false.
 1. `do_unzip`: Whether or not to unzip and compute PRF values on-demand. Defaults to false.
 1. `do_delay`: Whether or not to delay before sending message. Useful in measuring optimal round trip time. Defaults to false.
