@@ -4,13 +4,50 @@ This is a prototype implementation for the paper 'OrgAn: Organizational Anonymit
 
 ## Steps to run a local setup and test
 
-- Make sure that you have Rust installed.
+- Make sure that you have Rust installed. (`https://www.rust-lang.org/`)
 
 - Run `cargo build --release` to build the prototype.
 
 - Use `./script_local/test.sh` to start a test run. The config file is located at `./script_local/config.json`.
 
-## Steps to repeat the experiment
+This will generate the secrets as one guard server, and then launch the specified number of nodes (1 relay + 5 clients by default) to simulate the exchange of the base round and the bulk round under different settings locally to measure the performance. The settings can be checked under `./script_local/config`, and the log will be dumped to `./log/local`.
+
+- You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script_local/extract.sh`.
+
+Run this script will yield a result like:
+
+```
+Optimal round trip time (s, base round and bulk round respectively):
+onoprf58.json
+0.01 0.066
+
+oprf1024.json
+0.014 0.015
+
+oprf58.json
+0.015 0.014
+
+Round trip time (s, base round and bulk round respectively):
+rnoprf58.json
+0.035 0.125
+
+rprf1024.json
+0.014 0.018
+
+rprf58.json
+0.012 0.01
+
+Average round time (s, both base and bulk round):
+tnoprf1024.json
+0.26
+
+tprf1024.json
+0.031
+```
+
+The name of the config file explains the actual setting the experiment is performed under. `prf` means PRF is precomputed and `noprf` means that PRF is computed on-demand. `58` and `1024` describes that amount of bytes each node sends per bulk round.
+
+## Steps to repeat the benchmarks reported
 
 - Set up VPSs and dump their IP into a `txt` file, one per line with the first as relay.
 

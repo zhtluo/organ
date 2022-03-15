@@ -14,9 +14,10 @@ use rayon::prelude::*;
 use rug::{Complete, Integer};
 use std::collections::HashMap;
 
+/// Solve the equation to find the permutation for the base round.
 pub fn solve_equation(
     c: &Config,
-    base_prf: &SetupRelay,
+    base_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBaseMessage>,
 ) -> Vec<Integer> {
     debug!("Client messages: {:?}", messages);
@@ -29,7 +30,7 @@ pub fn solve_equation(
 
     let final_values: Vec<Integer> = relay_messages
         .par_iter()
-        .zip(base_prf.values.share.scaled.par_iter())
+        .zip(base_prf.par_iter())
         .map(|(rmsg, prf)| {
             let (_quotient, rem) = Integer::from(rmsg - prf)
                 .div_rem_euc_ref(&c.base_params.q)
@@ -38,21 +39,24 @@ pub fn solve_equation(
         })
         .collect();
     debug!("final_values before rounding: {:?}", final_values);
+    // Round to eliminate the error in almost key-homomorphic functions.
     let final_values: Vec<Integer> = final_values
         .par_iter()
         .map(|x| (x + Integer::from(1000 / 2)) / 1000 % &c.base_params.p)
         .collect();
     debug!("final_values: {:?}", final_values);
 
+    // Solve the equation.
     let solve = solve_impl(&c.base_params.p, &final_values);
     debug!("solve: {:?}", solve);
 
     solve
 }
 
+/// Compute the message for the bulk round.
 pub fn compute_message(
     c: &Config,
-    bulk_prf: &SetupRelay,
+    bulk_prf: &Vec<Integer>,
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
     let relay_messages: Vec<Integer> = (0..c.slot_per_round * c.client_size)
@@ -65,30 +69,15 @@ pub fn compute_message(
             relay_msg_of_slot
         })
         .collect();
-
-    /*
-    let mut futures = Vec::new();
-    for i in 0..c.bulk_params.vector_len * c.client_size {
-        futures.push((|| async move {
-            let mut relay_msg_of_slot = Integer::from(0);
-            for (_nid, msg) in messages.iter() {
-                relay_msg_of_slot = (relay_msg_of_slot + &msg.slot_messages[i]) % &c.bulk_params.q;
-            }
-            relay_msg_of_slot
-        })());
-    }
-    let relay_messages = join_all(futures).await;
-    debug!("bulk_relay_messages: {:?}", relay_messages);
-    */
-
     let final_values: Vec<Integer> = relay_messages
         .par_iter()
-        .zip(bulk_prf.values.share.scaled.par_iter())
+        .zip(bulk_prf.par_iter())
         .map(|(rmsg, prf)| {
             (Integer::from(rmsg - prf) % &c.bulk_params.q + &c.bulk_params.q) % &c.bulk_params.q
         })
         .collect();
     debug!("final_values before rounding: {:?}", final_values);
+    // Round to eliminate the error in almost key-homomorphic functions.
     let final_values: Vec<Integer> = final_values
         .par_iter()
         .map(|x| (x + Integer::from(1000 / 2)) / 1000 % &c.bulk_params.p)
@@ -123,6 +112,7 @@ async fn handle_connection(
     }
 }
 
+/// A simple listener for connections.
 async fn listener(
     c: &Config,
     reactor_input_channel_send: Sender<Vec<u8>>,
@@ -165,6 +155,7 @@ async fn sender(
     }
 }
 
+/// Initializes the network and readies the reactor to process the messages.
 pub async fn main(c: Config, base_prf: SetupRelay, bulk_prf: SetupRelay) {
     let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
     let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
@@ -183,6 +174,229 @@ pub async fn main(c: Config, base_prf: SetupRelay, bulk_prf: SetupRelay) {
         }
     );
 }
+
+/// Prepares the base and bulk round reactors and route the message accordingly.
+pub async fn reactor(
+    c: &Config,
+    base_prf: SetupRelay,
+    bulk_prf: SetupRelay,
+    reactor_input_channel: Receiver<Vec<u8>>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let (base_input_channel_send, base_input_channel_recv) = unbounded::<ClientBaseMessage>();
+    let (bulk_input_channel_send, bulk_input_channel_recv) = unbounded::<ClientBulkMessage>();
+    let msg_dist = || async move {
+        loop {
+            let message = &reactor_input_channel.recv().await.unwrap();
+            info!("Got message of size {}.", message.len());
+            let message: Message = bincode::deserialize(&message).unwrap();
+            match message {
+                Message::ClientBaseMessage(msg) => {
+                    base_input_channel_send.send(msg).await.unwrap();
+                }
+                Message::ClientBulkMessage(msg) => {
+                    bulk_input_channel_send.send(msg).await.unwrap();
+                }
+                _ => {
+                    error!("Unknown message {:?}.", message);
+                }
+            }
+        }
+    };
+    select!(
+        () = msg_dist().fuse() => {},
+        ((), ()) = join(reactor_base_round(
+            c,
+            base_prf,
+            base_input_channel_recv,
+            reactor_output_channel.clone()
+        ),
+        reactor_bulk_round(
+            c,
+            bulk_prf,
+            bulk_input_channel_recv,
+            reactor_output_channel.clone()
+        )).fuse() => {
+            debug!("Reactor finished.");
+        }
+    );
+}
+
+/// Verifies the PRF if simulating blame protocol.
+fn verify(
+    params: &ProtocolParams,
+    msg: &Vec<Integer>,
+    msg_b: &Vec<Integer>,
+    e: &Vec<Vec<u8>>,
+    qw: &Vec<Vec<u8>>,
+) -> bool {
+    msg.par_iter()
+        .zip(msg_b.par_iter())
+        .zip(e.par_iter())
+        .zip(qw.par_iter())
+        .all(|(((a, b), c), d)| {
+            add(
+                params,
+                &add(
+                    params,
+                    &mul(
+                        params,
+                        &get_g(params),
+                        &Integer::from(a * &params.ring_v.order),
+                    ),
+                    &mul(
+                        params,
+                        &get_h(params),
+                        &Integer::from(b * &params.ring_v.order),
+                    ),
+                ),
+                &from_bytes(params, c),
+            )
+            .eq(
+                &params.group.as_ref().unwrap(),
+                &from_bytes(params, d),
+                &mut new_big_num_context(),
+            )
+            .unwrap()
+        })
+}
+
+/// Base round handler.
+pub async fn reactor_base_round(
+    c: &Config,
+    base_prf: SetupRelay,
+    base_input_channel: Receiver<ClientBaseMessage>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBaseMessage>>::new();
+    let mut round: usize = 0;
+    loop {
+        round += 1;
+        if round > c.round {
+            info!("Base round finished.");
+            return;
+        }
+        info!("Base round {}.", round);
+        if base_protocol_buffer.get(&round).is_none() {
+            base_protocol_buffer.insert(round, HashMap::new());
+        }
+        loop {
+            let msg = base_input_channel.recv().await.unwrap();
+            info!(
+                "Received ClientBaseMessage from {} on round {}.",
+                msg.nid, msg.round
+            );
+            if base_protocol_buffer.get(&msg.round).is_none() {
+                base_protocol_buffer.insert(msg.round, HashMap::new());
+            }
+            // Verify the PRF if doing blame protocol simulation.
+            if c.do_blame {
+                if !verify(
+                    &c.base_params,
+                    &msg.blame.as_ref().unwrap(),
+                    &msg.blame_blinding.as_ref().unwrap(),
+                    msg.e.as_ref().unwrap(),
+                    &base_prf.qw.as_ref().unwrap()[msg.nid],
+                ) {
+                    warn!("Blame protocol verification failure for {}.", msg.nid);
+                }
+            }
+            base_protocol_buffer
+                .get_mut(&msg.round)
+                .unwrap()
+                .insert(msg.nid, msg);
+            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
+                info!("All base messages received. Computing...");
+                let mut scaled = base_prf.values.share.scaled.clone();
+                // Compute PRF on-demand if needed.
+                if c.do_unzip {
+                    scaled = crate::prf::compute(&c.base_params, &base_prf.values);
+                }
+                // Solve the equation to find out the permutation.
+                let perm = solve_equation(&c, &scaled, &base_protocol_buffer.get(&round).unwrap());
+                let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
+                    round: round,
+                    perm: perm,
+                }))
+                .unwrap();
+                info!("Sending ServerBaseMessage, size = {}...", message.len());
+                reactor_output_channel.send(message).await.unwrap();
+                info!("Sent ServerBaseMessage.");
+                base_protocol_buffer.remove(&round);
+                break;
+            }
+        }
+    }
+}
+
+/// Bulk round handler.
+pub async fn reactor_bulk_round(
+    c: &Config,
+    bulk_prf: SetupRelay,
+    bulk_input_channel: Receiver<ClientBulkMessage>,
+    reactor_output_channel: Sender<Vec<u8>>,
+) {
+    let mut bulk_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBulkMessage>>::new();
+    let mut round: usize = 0;
+    loop {
+        round += 1;
+        if round > c.round {
+            info!("Bulk round finished.");
+            async_std::task::sleep(std::time::Duration::from_secs(5)).await;
+            return;
+        }
+        info!("Bulk round {}.", round);
+        if bulk_protocol_buffer.get(&round).is_none() {
+            bulk_protocol_buffer.insert(round, HashMap::new());
+        }
+        loop {
+            let msg = bulk_input_channel.recv().await.unwrap();
+            info!(
+                "Received ClientBulkMessage from {} on round {}.",
+                msg.nid, msg.round
+            );
+            if bulk_protocol_buffer.get(&msg.round).is_none() {
+                bulk_protocol_buffer.insert(msg.round, HashMap::new());
+            }
+            bulk_protocol_buffer
+                .get_mut(&msg.round)
+                .unwrap()
+                .insert(msg.nid, msg);
+            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
+                info!("All bulk messages received. Computing...");
+                let mut scaled = bulk_prf.values.share.scaled.clone();
+                if c.do_unzip {
+                    scaled = crate::prf::compute(&c.bulk_params, &bulk_prf.values);
+                }
+                // Remove the PRF and find the message.
+                compute_message(c, &scaled, &bulk_protocol_buffer.get(&round).unwrap());
+                if c.do_ping {
+                    info!(
+                        "{}",
+                        std::str::from_utf8(
+                            &std::process::Command::new("ping")
+                                .arg("google.com")
+                                .arg("-c")
+                                .arg("1")
+                                .output()
+                                .unwrap()
+                                .stdout
+                        )
+                        .unwrap()
+                    );
+                }
+                let message = bincode::serialize(&Message::ServerBulkMessage).unwrap();
+                info!("Sending ServerBulkMessage, size = {}...", message.len());
+                reactor_output_channel.send(message).await.unwrap();
+                info!("Sent ServerBulkMessage.");
+                bulk_protocol_buffer.remove(&round);
+                break;
+            }
+        }
+    }
+}
+
+// Prifi timing code below:
 
 pub async fn main_prifi(c: Config) {
     let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
@@ -304,324 +518,3 @@ pub async fn reactor_prifi_round(
         }
     }
 }
-
-pub async fn reactor(
-    c: &Config,
-    base_prf: SetupRelay,
-    bulk_prf: SetupRelay,
-    reactor_input_channel: Receiver<Vec<u8>>,
-    reactor_output_channel: Sender<Vec<u8>>,
-) {
-    let (base_input_channel_send, base_input_channel_recv) = unbounded::<ClientBaseMessage>();
-    let (bulk_input_channel_send, bulk_input_channel_recv) = unbounded::<ClientBulkMessage>();
-    let msg_dist = || async move {
-        loop {
-            let message = &reactor_input_channel.recv().await.unwrap();
-            info!("Got message of size {}.", message.len());
-            let message: Message = bincode::deserialize(&message).unwrap();
-            match message {
-                Message::ClientBaseMessage(msg) => {
-                    base_input_channel_send.send(msg).await.unwrap();
-                }
-                Message::ClientBulkMessage(msg) => {
-                    bulk_input_channel_send.send(msg).await.unwrap();
-                }
-                _ => {
-                    error!("Unknown message {:?}.", message);
-                }
-            }
-        }
-    };
-    select!(
-        () = msg_dist().fuse() => {},
-        ((), ()) = join(reactor_base_round(
-            c,
-            base_prf,
-            base_input_channel_recv,
-            reactor_output_channel.clone()
-        ),
-        reactor_bulk_round(
-            c,
-            bulk_prf,
-            bulk_input_channel_recv,
-            reactor_output_channel.clone()
-        )).fuse() => {
-            debug!("Reactor finished.");
-        }
-    );
-}
-
-fn verify(
-    params: &ProtocolParams,
-    msg: &Vec<Integer>,
-    msg_b: &Vec<Integer>,
-    e: &Vec<Vec<u8>>,
-    qw: &Vec<Vec<u8>>,
-) -> bool {
-    msg.par_iter()
-        .zip(msg_b.par_iter())
-        .zip(e.par_iter())
-        .zip(qw.par_iter())
-        .all(|(((a, b), c), d)| {
-            add(
-                params,
-                &add(
-                    params,
-                    &mul(
-                        params,
-                        &get_g(params),
-                        &Integer::from(a * &params.ring_v.order),
-                    ),
-                    &mul(
-                        params,
-                        &get_h(params),
-                        &Integer::from(b * &params.ring_v.order),
-                    ),
-                ),
-                &from_bytes(params, c),
-            )
-            .eq(
-                &params.group.as_ref().unwrap(),
-                &from_bytes(params, d),
-                &mut new_big_num_context(),
-            )
-            .unwrap()
-        })
-}
-
-pub async fn reactor_base_round(
-    c: &Config,
-    base_prf: SetupRelay,
-    base_input_channel: Receiver<ClientBaseMessage>,
-    reactor_output_channel: Sender<Vec<u8>>,
-) {
-    let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBaseMessage>>::new();
-    let mut round: usize = 0;
-    loop {
-        round += 1;
-        if round > c.round {
-            info!("Base round finished.");
-            return;
-        }
-        info!("Base round {}.", round);
-        if base_protocol_buffer.get(&round).is_none() {
-            base_protocol_buffer.insert(round, HashMap::new());
-        }
-        loop {
-            let msg = base_input_channel.recv().await.unwrap();
-            info!(
-                "Received ClientBaseMessage from {} on round {}.",
-                msg.nid, msg.round
-            );
-            if base_protocol_buffer.get(&msg.round).is_none() {
-                base_protocol_buffer.insert(msg.round, HashMap::new());
-            }
-            if c.do_blame {
-                if !verify(
-                    &c.base_params,
-                    &msg.blame.as_ref().unwrap(),
-                    &msg.blame_blinding.as_ref().unwrap(),
-                    msg.e.as_ref().unwrap(),
-                    &base_prf.qw.as_ref().unwrap()[msg.nid],
-                ) {
-                    warn!("Blame protocol verification failure for {}.", msg.nid);
-                }
-            }
-            base_protocol_buffer
-                .get_mut(&msg.round)
-                .unwrap()
-                .insert(msg.nid, msg);
-            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
-                info!("All base messages received. Computing...");
-                if c.do_unzip {
-                    let mut rand = rug::rand::RandState::new();
-                    crate::timing::compute(&crate::timing::CompParameters {
-                        a: std::iter::repeat_with(|| {
-                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                        })
-                        .take(c.base_params.vector_len)
-                        .collect(),
-                        b: std::iter::repeat_with(|| {
-                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                        })
-                        .take(c.base_params.vector_len)
-                        .collect(),
-                        p: c.base_params.p.clone(),
-                        w: c.base_params.ring_v.order.clone(),
-                        order: c.base_params.q.clone(),
-                    });
-                }
-                let perm =
-                    solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
-                let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
-                    round: round,
-                    perm: perm,
-                }))
-                .unwrap();
-                info!("Sending ServerBaseMessage, size = {}...", message.len());
-                reactor_output_channel.send(message).await.unwrap();
-                info!("Sent ServerBaseMessage.");
-                base_protocol_buffer.remove(&round);
-                break;
-            }
-        }
-    }
-}
-
-pub async fn reactor_bulk_round(
-    c: &Config,
-    bulk_prf: SetupRelay,
-    bulk_input_channel: Receiver<ClientBulkMessage>,
-    reactor_output_channel: Sender<Vec<u8>>,
-) {
-    let mut bulk_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBulkMessage>>::new();
-    let mut round: usize = 0;
-    loop {
-        round += 1;
-        if round > c.round {
-            info!("Bulk round finished.");
-            async_std::task::sleep(std::time::Duration::from_secs(5)).await;
-            return;
-        }
-        info!("Bulk round {}.", round);
-        if bulk_protocol_buffer.get(&round).is_none() {
-            bulk_protocol_buffer.insert(round, HashMap::new());
-        }
-        loop {
-            let msg = bulk_input_channel.recv().await.unwrap();
-            info!(
-                "Received ClientBulkMessage from {} on round {}.",
-                msg.nid, msg.round
-            );
-            if bulk_protocol_buffer.get(&msg.round).is_none() {
-                bulk_protocol_buffer.insert(msg.round, HashMap::new());
-            }
-            bulk_protocol_buffer
-                .get_mut(&msg.round)
-                .unwrap()
-                .insert(msg.nid, msg);
-            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
-                info!("All bulk messages received. Computing...");
-                if c.do_unzip {
-                    let mut rand = rug::rand::RandState::new();
-                    crate::timing::compute(&crate::timing::CompParameters {
-                        a: std::iter::repeat_with(|| {
-                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                        })
-                        .take(c.bulk_params.vector_len.next_power_of_two())
-                        .collect(),
-                        b: std::iter::repeat_with(|| {
-                            Integer::from(c.base_params.p.random_below_ref(&mut rand))
-                        })
-                        .take(c.bulk_params.vector_len.next_power_of_two())
-                        .collect(),
-                        p: c.bulk_params.p.clone(),
-                        w: c.bulk_params.ring_v.order.clone(),
-                        order: c.bulk_params.q.clone(),
-                    });
-                }
-                compute_message(c, &bulk_prf, &bulk_protocol_buffer.get(&round).unwrap());
-                if c.do_ping {
-                    info!(
-                        "{}",
-                        std::str::from_utf8(
-                            &std::process::Command::new("ping")
-                                .arg("google.com")
-                                .arg("-c")
-                                .arg("1")
-                                .output()
-                                .unwrap()
-                                .stdout
-                        )
-                        .unwrap()
-                    );
-                }
-                let message = bincode::serialize(&Message::ServerBulkMessage).unwrap();
-                info!("Sending ServerBulkMessage, size = {}...", message.len());
-                reactor_output_channel.send(message).await.unwrap();
-                info!("Sent ServerBulkMessage.");
-                bulk_protocol_buffer.remove(&round);
-                break;
-            }
-        }
-    }
-}
-
-/*
-pub async fn main(c: Config, base_prf: Vec<Integer>, _bulk_prf: Vec<Integer>) {
-    let socket = UdpSocket::bind(c.server_addr).unwrap();
-    let mut base_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBaseMessage>>::new();
-    let mut bulk_protocol_buffer = HashMap::<usize, HashMap<usize, ClientBulkMessage>>::new();
-    let mut round: usize = 0;
-    loop {
-        round += 1;
-        info!("Round {}.", round);
-        if base_protocol_buffer.get(&round).is_none() {
-            base_protocol_buffer.insert(round, HashMap::new());
-        }
-        if bulk_protocol_buffer.get(&round).is_none() {
-            bulk_protocol_buffer.insert(round, HashMap::new());
-        }
-
-        loop {
-            let mut buf = [0; MAX_MESSAGE_SIZE];
-            let (size, _src) = socket.recv_from(&mut buf).unwrap();
-            let message: Message = bincode::deserialize(&buf[..size]).unwrap();
-            match message {
-                Message::ClientBaseMessage(msg) => {
-                    info!(
-                        "Received ClientBaseMessage from {} on round {}.",
-                        msg.nid, msg.round
-                    );
-                    if base_protocol_buffer.get(&msg.round).is_none() {
-                        base_protocol_buffer.insert(msg.round, HashMap::new());
-                    }
-                    base_protocol_buffer
-                        .get_mut(&msg.round)
-                        .unwrap()
-                        .insert(msg.nid, msg);
-                }
-                Message::ClientBulkMessage(msg) => {
-                    info!(
-                        "Received ClientBulkMessage from {} on round {}.",
-                        msg.nid, msg.round
-                    );
-                    if bulk_protocol_buffer.get(&msg.round).is_none() {
-                        bulk_protocol_buffer.insert(msg.round, HashMap::new());
-                    }
-                    bulk_protocol_buffer
-                        .get_mut(&msg.round)
-                        .unwrap()
-                        .insert(msg.nid, msg);
-                }
-                _ => {
-                    error!("Unknown message {:?}.", message);
-                }
-            }
-
-            if base_protocol_buffer.get(&round).unwrap().len() == c.client_size {
-                info!("All base messages received. Computing...");
-                let perm =
-                    solve_equation(&c, &base_prf, &base_protocol_buffer.get(&round).unwrap());
-                let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
-                    round: round,
-                    perm: perm,
-                }))
-                .unwrap();
-                info!("Sending ServerBaseMessage, size = {}...", message.len());
-                for addr in c.client_addr.iter() {
-                    socket.send_to(&message, addr).unwrap();
-                }
-                info!("Sent ServerBaseMessage.");
-                base_protocol_buffer.remove(&round);
-            }
-
-            if bulk_protocol_buffer.get(&round).unwrap().len() == c.client_size {
-                info!("All bulk messages received. Computing...");
-                bulk_protocol_buffer.remove(&round);
-                break;
-            }
-        }
-    }
-}
-*/

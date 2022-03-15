@@ -5,6 +5,7 @@ use crate::net::{read_stream, write_stream};
 use rug::Integer;
 use std::net::TcpStream;
 
+/// Add randomness to generate the cipher text for the base round.
 pub fn generate_client_base_message(
     c: &Config,
     prf: &Vec<Integer>,
@@ -21,6 +22,7 @@ pub fn generate_client_base_message(
     slot_messages
 }
 
+/// Process and send the base round message.
 fn send_client_base_message(
     c: &Config,
     nid: usize,
@@ -29,29 +31,15 @@ fn send_client_base_message(
     socket: &mut TcpStream,
     round: usize,
 ) {
+    let mut scaled = base_prf.share.scaled.clone();
+    // If we need to compute PRF on-demand...
     if c.do_unzip {
-        let mut rand = rug::rand::RandState::new();
-        crate::timing::compute(&crate::timing::CompParameters {
-            a: std::iter::repeat_with(|| {
-                Integer::from(c.base_params.p.random_below_ref(&mut rand))
-            })
-            .take(c.base_params.vector_len)
-            .collect(),
-            b: std::iter::repeat_with(|| {
-                Integer::from(c.base_params.p.random_below_ref(&mut rand))
-            })
-            .take(c.base_params.vector_len)
-            .collect(),
-            p: c.base_params.p.clone(),
-            w: c.base_params.ring_v.order.clone(),
-            order: c.base_params.q.clone(),
-        });
+        scaled = crate::prf::compute(&c.base_params, &base_prf);
     }
-
     let message = bincode::serialize(&Message::ClientBaseMessage(ClientBaseMessage {
         round: round,
         nid: nid,
-        slot_messages: generate_client_base_message(&c, &base_prf.share.scaled, message_ele),
+        slot_messages: generate_client_base_message(&c, &scaled, message_ele),
         blame: if c.do_blame {
             Some(base_prf.share.scaled.clone())
         } else {
@@ -66,6 +54,7 @@ fn send_client_base_message(
     }))
     .unwrap();
 
+    // Sleep to mesaure the optimal round trip time.
     if c.do_delay && nid == 0 {
         std::thread::sleep(std::time::Duration::from_secs(2))
     }
@@ -75,6 +64,7 @@ fn send_client_base_message(
     info!("Sent ClientBaseMessage.");
 }
 
+/// Process and send the bulk round message.
 fn send_client_bulk_message(
     c: &Config,
     nid: usize,
@@ -83,27 +73,14 @@ fn send_client_bulk_message(
     socket: &mut TcpStream,
     round: usize,
 ) {
+    let mut scaled = bulk_prf.share.scaled.clone();
+    // If we need to compute PRF on-demand...
     if c.do_unzip {
-        let mut rand = rug::rand::RandState::new();
-        crate::timing::compute(&crate::timing::CompParameters {
-            a: std::iter::repeat_with(|| {
-                Integer::from(c.bulk_params.p.random_below_ref(&mut rand))
-            })
-            .take(c.bulk_params.vector_len.next_power_of_two())
-            .collect(),
-            b: std::iter::repeat_with(|| {
-                Integer::from(c.bulk_params.p.random_below_ref(&mut rand))
-            })
-            .take(c.bulk_params.vector_len.next_power_of_two())
-            .collect(),
-            p: c.bulk_params.p.clone(),
-            w: c.bulk_params.ring_v.order.clone(),
-            order: c.bulk_params.q.clone(),
-        });
+        scaled = crate::prf::compute(&c.bulk_params, &bulk_prf);
     }
     let slot_index_start = posid * c.slot_per_round;
     let slot_index_end = (posid + 1) * c.slot_per_round;
-    let mut prf_evaluations = bulk_prf.share.scaled[0..c.slot_per_round * c.client_size].to_vec();
+    let mut prf_evaluations = scaled[0..c.slot_per_round * c.client_size].to_vec();
     let message_ele = nid + 1;
     for i in slot_index_start..slot_index_end {
         prf_evaluations[i] =
@@ -116,6 +93,7 @@ fn send_client_bulk_message(
     }))
     .unwrap();
 
+    // Sleep to mesaure the optimal round trip time.
     if c.do_delay && nid == 0 {
         std::thread::sleep(std::time::Duration::from_secs(2))
     }
@@ -125,6 +103,7 @@ fn send_client_bulk_message(
     info!("Sent ClientBulkMessage.");
 }
 
+/// Overarching function.
 pub fn main(c: Config, nid: usize, base_prf: SetupValues, bulk_prf: SetupValues) {
     debug!("Connecting to {:?}...", c.server_addr);
     let mut socket = TcpStream::connect(c.server_addr).unwrap();
@@ -136,6 +115,7 @@ pub fn main(c: Config, nid: usize, base_prf: SetupValues, bulk_prf: SetupValues)
             round += 1;
             info!("Round {}.", round);
 
+            // Generate a random number for identification.
             let message_ele = Integer::from(c.base_params.p.random_below_ref(&mut rand));
             info!("Message in base round: {}", message_ele);
             send_client_base_message(&c, nid, &base_prf, &message_ele, &mut socket, round);
@@ -172,12 +152,14 @@ pub fn main(c: Config, nid: usize, base_prf: SetupValues, bulk_prf: SetupValues)
                 }
             }
         } else {
+            // Sleep a little bit after everything finishes to ensure that the message is sent.
             std::thread::sleep(std::time::Duration::from_secs(5));
             return;
         }
     }
 }
 
+/// Code to time Prifi.
 pub fn main_prifi(c: Config, nid: usize) {
     debug!("Connecting to {:?}...", c.server_addr);
     let mut socket = TcpStream::connect(c.server_addr).unwrap();

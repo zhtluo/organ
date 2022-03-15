@@ -10,6 +10,7 @@ fn load_prf(input: &Vec<u8>) -> guard::Setup {
     bincode::deserialize::<guard::Setup>(input).unwrap()
 }
 
+/// Genereate pre-computed PRF based on `params`.
 fn generate_prf(path: &str, client_size: usize, params: &config::ProtocolParams, do_blame: bool) {
     let shares: Vec<Vec<Integer>> = (0..params.vector_len)
         .map(|_| guard::generate_sum_shares(client_size, &params.ring_v.order, &Integer::from(1)))
@@ -41,6 +42,7 @@ fn generate_prf(path: &str, client_size: usize, params: &config::ProtocolParams,
     .unwrap();
 }
 
+/// Command line parser and function caller.
 #[async_std::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();

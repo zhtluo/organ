@@ -101,7 +101,7 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
         }
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &_size| {
-            b.iter(|| server::solve_equation(&c, &sr, &messages));
+            b.iter(|| server::solve_equation(&c, &sr.values.share.scaled, &messages));
         });
     }
     group.finish();
@@ -140,7 +140,7 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
                     let txc = tx.clone();
                     let paramc = Arc::clone(&param_arc);
                     children.push(thread::spawn(move || {
-                        txc.send(server::solve_equation(&paramc.0, &paramc.1, &paramc.2))
+                        txc.send(server::solve_equation(&paramc.0, &paramc.1.values.share.scaled, &paramc.2))
                             .unwrap();
                     }));
                 }
