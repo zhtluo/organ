@@ -17,11 +17,13 @@ The clients use Base round for slot selection and Bulk round to forward their me
 
 The default local test run launches one guard which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
-The network configuration is specified in `./script_local/config`, and the log, including timestamps on each round, is dumped to `./log/local/<setting name>/`.
+## Configuration
 
-- You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script_local/extract.sh`.
+The protocol configuration is specified in `./script_local/config`, and the log, including timestamps on each round, is dumped to `./log/local/<setting name>/`.
 
-Run this script will yield a result like:
+- The log may be analyzed in any manner. For simplicity a code snippet is provided under `./script_local/extract.sh`.
+
+Running this script will yield a result like:
 
 ```
 Optimal round trip time (in seconds, base round and bulk round respectively):
@@ -52,13 +54,14 @@ avg_rtt_with_prf_preprocessing_1024Bmessage.json
 0.048
 ```
 
-The name of the config file explains the actual setting the experiment is performed under.
+For different experiments, we use different configuration files, specified under `script_local/config/#no_of_clients/`
+The name of each config file explains the actual setting the experiment is performed under.
 
-## Steps to repeat the benchmarks reported
+## Steps to repeat the benchmarks reported in the paper
 
-- Set up VPSs and dump their IP into a `.txt` file, one per line with the first as relay.
+- Set up AWS and add the node IPs into a `.txt` file, one per line with the first IP being the IP of the relay node.
 
-- The script uses `~/organ.pem` as the SSH keypair. Modify if you want to use something else.
+- The scripts (eg: `run.sh`, `setup.sh`)from the folder `scripts` use an `~/organ.pem` as the SSH keypair to access the AWS machines. Modify if you want to use something else.
 
 - Run `./script/setup.sh <Your IP file>` to build the prototype on each of the machine. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
 
@@ -66,9 +69,8 @@ The name of the config file explains the actual setting the experiment is perfor
 
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script/extract.sh`.
 
-## Details on the configuration
-
-Each test is accompanied with a `.json` file that specifies the setting for that run. An example of the file should look like this:
+## Further details on the options available for the protocol configuration. 
+The configuration `.json` files of local test `./script_local/config` or AWS network tests in `/script/config/#no_of_clients/` offer the below variables which can be changed from the default values specified (also viewable in `/src/config.rs`)  are stated below. Each test is accompanied with a `.json` file that specifies the setting for that run. An example of the file should look like this:
 
 ```
 {
