@@ -1,4 +1,4 @@
-# organ
+# OrgAn
 
 This is a prototype implementation of the OrgAn protocol proposed in the paper 'OrgAn: Organizational Anonymity with Low Latency'. 
 The protocol follows a client/relay/server/relay model, where the setup server provides secret shares of a publicly known value to the clients. The clients in the organisation communicate anonymously through the relay with the outside world. The communication proceeds in `Base` and `Bulk` rounds. The clients use `Base` round for slot selection and `Bulk` round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key homomorphic PRF output. 
@@ -24,7 +24,7 @@ This will generate the secrets as one guard server, and then launch the specifie
 Run this script will yield a result like:
 
 ```
-Optimal round trip time (s, base round and bulk round respectively):
+Optimal round trip time in seconds (base round and bulk round respectively):
 onoprf58.json
 0.01 0.066
 
@@ -34,7 +34,7 @@ oprf1024.json
 oprf58.json
 0.015 0.014
 
-Round trip time (s, base round and bulk round respectively):
+Round trip time in seconds (base round and bulk round respectively):
 rnoprf58.json
 0.035 0.125
 
@@ -44,7 +44,7 @@ rprf1024.json
 rprf58.json
 0.012 0.01
 
-Average round time (s, both base and bulk round):
+Average round time in seconds (both base and bulk round):
 tnoprf1024.json
 0.26
 
