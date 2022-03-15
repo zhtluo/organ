@@ -1,4 +1,4 @@
-# OrgAn
+# OrgAn: Organizational Anonymity with Low Latency
 
 This is a prototype implementation of the OrgAn protocol proposed in the paper 'OrgAn: Organizational Anonymity with Low Latency'. 
 The protocol follows a client/relay/server model, where the setup server provides secret shares of a publicly known value to the clients. The clients in the organisation communicate anonymously through the relay with the outside world. The communication proceeds in `Base` and `Bulk` rounds. 
