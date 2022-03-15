@@ -18,8 +18,8 @@ The clients use Base round for slot selection and Bulk round to forward their me
 The default local test run launches one guard which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the base round and the bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
 ## Configuration
-The configuration is specified in `./script_local/config`, and the log, including timestamps on each round, is dumped to `./log/local/<setting name>/`.
-The network configuration is specified under `./script_local/config`. The number of slots 
+The network configuration is specified in `./script_local/config`, and the log, including timestamps on each round, is dumped to `./log/local/<setting name>/`.
+
 
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script_local/extract.sh`.
 
