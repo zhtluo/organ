@@ -12,7 +12,7 @@ The clients use Base round for slot selection and Bulk round to forward their me
 - Install dependencies with:
 
 ```
-sudo apt install libgmp-dev libmpfr-dev libflint-dev
+sudo apt install libgmp-dev libmpfr-dev libflint-dev openssl-dev
 ```
 
 - Clone the repository using `git clone https://github.com/zhtluo/organ.git`.
