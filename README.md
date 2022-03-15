@@ -54,7 +54,7 @@ avg_rtt_with_prf_preprocessing_1024Bmessage.json
 0.048
 ```
 
-For different experiments, we use different configuration files, specified under `script_local/config/#no_of_clients/`
+For different experiments, we use different configuration files, specified under `script_local/config/<no of clients>/`
 The name of each config file explains the actual setting the experiment is performed under.
 
 ## Steps to repeat the benchmarks reported in the paper
@@ -70,7 +70,7 @@ The name of each config file explains the actual setting the experiment is perfo
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script/extract.sh`.
 
 ## Further details on the options available for the protocol configuration. 
-The configuration `.json` files of local test `./script_local/config` or AWS network tests in `/script/config/#no_of_clients/` offer the below variables which can be changed from the default values specified (also viewable in `/src/config.rs`)  are stated below. Each test is accompanied with a `.json` file that specifies the setting for that run. An example of the file should look like this:
+The configuration `.json` files of local test `./script_local/config` or AWS network tests in `/script/config/<no of clients>/` offer the below variables which can be changed from the default values specified (also viewable in `/src/config.rs`)  are stated below. Each test is accompanied with a `.json` file that specifies the setting for that run. An example of the file should look like this:
 
 ```
 {
@@ -142,9 +142,9 @@ The configuration `.json` files of local test `./script_local/config` or AWS net
 1. `server_addr`: The address of the relay and the port used. **Must be included.**
 1. `client_size`: The number of clients. **Must be included.**
 1. `base_params`: The parameters for the Base round, including `p`, `q`, `v`, the length of the vector in the communication `vector_len`, number of bits per round `bits`, and the ECC group id for the blame protocol as specified by OpenSSL `group_nid`. If omitted, the default value will be used.
-1. `bulk_params`: The parameters for the Bulk round, same as the base round. If omitted, the default value will be used.
+1. `bulk_params`: The parameters for the Bulk round, same as the Base round. If omitted, the default value will be used.
 1. `round`: The total number of rounds to run. **Must be included.**
-1. `slot_per_round`: How many slots does each client use per bulk round. This is the total message length divided by 226 (rounded to the next integer). **Must be included.** 
+1. `slot_per_round`: How many slots does each client use per Bulk round. This is the total message length divided by 226 (rounded to the next integer). **Must be included.** 
 1. `do_blame`: Whether or not to test blame protocol by running it every round. Defaults to false.
 1. `do_unzip`: Whether or not to unzip and compute PRF values on-demand. Defaults to false.
 1. `do_delay`: Whether or not to delay before sending message. Useful in measuring optimal round trip time. Defaults to false.
