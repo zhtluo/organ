@@ -28,7 +28,7 @@ sudo pacman -Sy flint --noconfirm
 
 #### Ubuntu
 
-We use `libflint` library for equation solving and build it from source with the following script snippet:
+Build it from source with the following script snippet:
 
 ```
 sudo apt update
