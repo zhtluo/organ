@@ -28,7 +28,7 @@ sudo pacman -Sy flint --noconfirm
 
 #### Ubuntu
 
-Build it from source with the following script snippet:
+Build from source with the following script snippet:
 
 ```
 sudo apt update
