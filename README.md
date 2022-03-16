@@ -5,15 +5,42 @@ The protocol follows a client/relay/server model, where the setup server provide
 
 The clients use Base round for slot selection and Bulk round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key-homomorphic PRF output. The relay collects all the messages from all the clients in a Base round, computes the Newton's sum equation system and solves it to obtain a random permutation of client input values. This permutation is used to select slots in the Bulk round. Clients choose a 64 bit random value for slot selection in the Base round. In the Bulk round, a client can forward 226 bits of message per allotted slot.  
 
+## Dependency installation
+
+### Rust
+
+If you do not have Rust (`https://www.rust-lang.org/`) installed, you can install it via:
+
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+```
+
+### Flint
+
+#### Arch Linux
+
+Use `pacman` to install `libflint`:
+
+```
+sudo pacman -Sy flint --noconfirm
+```
+
+#### Ubuntu
+
+The `libflint` library for the current release of Ubuntu is much outdated, so before the release of Ubuntu Jammy Jellyfish (22.04) we will have to build `libflint` from source with the following script snippet:
+
+```
+sudo apt update
+sudo apt install build-essential libgmp-dev libmpfr-dev m4
+wget https://www.flintlib.org/flint-2.8.4.tar.gz
+tar -xf flint-2.8.4.tar.gz
+cd flint-2.8.4/
+./configure
+sudo make install
+```
+
 ## Local setup and test
-
-- Make sure that you have Rust installed. (`https://www.rust-lang.org/`)
-
-- Install dependencies with:
-
-```
-sudo apt install libgmp-dev libmpfr-dev libflint-dev
-```
 
 - Clone the repository using `git clone https://github.com/zhtluo/organ.git`.
 
