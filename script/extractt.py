@@ -16,4 +16,4 @@ with open(sys.argv[1], 'r') as f:
         for m in mm:
             time2 = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + \
                 int(m.group(3)) + int(m.group(4)) / 1000000
-    print("{}".format(round((time2 - time1) / 100, 3)))
+    print("{}".format(round((time2 - time1) / 10, 3)))
