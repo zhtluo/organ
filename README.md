@@ -28,7 +28,7 @@ sudo pacman -Sy flint --noconfirm
 
 #### Ubuntu
 
-The `libflint` library for the current release of Ubuntu is much outdated, so before the release of Ubuntu Jammy Jellyfish (22.04) we will have to build `libflint` from source with the following script snippet:
+We use `libflint` library for equation solving and build it from source with the following script snippet:
 
 ```
 sudo apt update
