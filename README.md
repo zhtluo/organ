@@ -47,7 +47,7 @@ sudo ldconfig
 
 - Change directory with `cd organ` and use `cargo build --release` to build the prototype.
 
-- Use `./script_local/test.sh` to start a test-run.
+- Use `bash ./script_local/test.sh` to start a test-run.
 
 The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the Base round and the Bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
