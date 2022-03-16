@@ -38,6 +38,7 @@ tar -xf flint-2.8.4.tar.gz
 cd flint-2.8.4/
 ./configure
 sudo make install
+sudo ldconfig
 ```
 
 ## Local setup and test
