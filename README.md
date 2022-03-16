@@ -47,7 +47,7 @@ sudo ldconfig
 
 - Change directory with `cd organ` and use `cargo build --release` to build the prototype.
 
-- Use `./script_local/test.sh` to start a test-run.
+- Use `bash ./script_local/test.sh` to start a test-run.
 
 The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the Base round and the Bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
@@ -57,7 +57,7 @@ For the local tests, the protocol configuration is specified in `./script_local/
 
 - The log may be analyzed in any manner. For simplicity a code snippet is provided under `./script_local/extract.sh`.
 
-Running this script will yield a result like:
+Running this script with `./script_local/extract.sh` will yield a result like:
 
 ```
 Optimal round trip time (in seconds, base round and bulk round respectively):
@@ -97,13 +97,14 @@ The name of each config file explains the actual setting the experiment is perfo
 
 - The scripts (eg: `run.sh`, `setup.sh`) from the folder `scripts` use an `~/organ.pem` as the SSH keypair to access the AWS machines. Modify it to reflect your keys.
 
-- Run `./script/setup.sh <Your IP address filename.txt>` to build the prototype on each of the machines. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
+- Run `bash ./script/setup.sh <Your IP address filename.txt>` to build the prototype on each of the machines. Note you may have to modify `./script/get_pvt_ip.sh` to recognize your subnet if your private network address is different from `172.31.*.*`.
 
-- Run `./script/run.sh <Your IP address filename.txt>` to run all the tests and fetch the log under `./log/`.
+- Run `bash ./script/run.sh <Your IP address filename.txt>` to run all the tests and fetch the log under `./log/`.
 
 - You may analyze the log anyway you want. For simplicity a code snippet is provided under `./script/extract.sh`.
 
 ## Further details on the options available for the protocol configuration. 
+
 The configuration `.json` files of local test `./script_local/config` or AWS network tests in `/script/config/<no of clients>/` offer the below variables which can be changed from the default values specified (also viewable in `/src/config.rs`)  are stated below. Each test is accompanied with a `.json` file that specifies the setting for that run. An example of the file should look like this:
 
 ```
