@@ -14,10 +14,10 @@ use rayon::prelude::*;
 use rug::{Complete, Integer};
 use std::collections::HashMap;
 
-/// Solve the equation to find the permutation for the base round.
+/// Solves the equation to find the permutation for the base round.
 pub fn solve_equation(
     c: &Config,
-    base_prf: &Vec<Integer>,
+    base_prf: &[Integer],
     messages: &HashMap<usize, ClientBaseMessage>,
 ) -> Vec<Integer> {
     debug!("Client messages: {:?}", messages);
@@ -53,10 +53,10 @@ pub fn solve_equation(
     solve
 }
 
-/// Compute the message for the bulk round.
+/// Computes the message for the bulk round.
 pub fn compute_message(
     c: &Config,
-    bulk_prf: &Vec<Integer>,
+    bulk_prf: &[Integer],
     messages: &HashMap<usize, ClientBulkMessage>,
 ) -> Vec<Integer> {
     let relay_messages: Vec<Integer> = (0..c.slot_per_round * c.client_size)
@@ -87,6 +87,7 @@ pub fn compute_message(
     final_values
 }
 
+/// Connection handler.
 async fn handle_connection(
     mut stream: TcpStream,
     channel_read: Sender<Vec<u8>>,
@@ -134,6 +135,7 @@ async fn listener(
         .await;
 }
 
+/// Simple message sender.
 async fn sender(
     boardcast_channels_recv: Receiver<Sender<Vec<u8>>>,
     reactor_output_channel_recv: Receiver<Vec<u8>>,
@@ -189,7 +191,7 @@ pub async fn reactor(
         loop {
             let message = &reactor_input_channel.recv().await.unwrap();
             info!("Got message of size {}.", message.len());
-            let message: Message = bincode::deserialize(&message).unwrap();
+            let message: Message = bincode::deserialize(message).unwrap();
             match message {
                 Message::ClientBaseMessage(msg) => {
                     base_input_channel_send.send(msg).await.unwrap();
@@ -225,10 +227,10 @@ pub async fn reactor(
 /// Verifies the PRF if simulating blame protocol.
 fn verify(
     params: &ProtocolParams,
-    msg: &Vec<Integer>,
-    msg_b: &Vec<Integer>,
-    e: &Vec<Vec<u8>>,
-    qw: &Vec<Vec<u8>>,
+    msg: &[Integer],
+    msg_b: &[Integer],
+    e: &[Vec<u8>],
+    qw: &[Vec<u8>],
 ) -> bool {
     msg.par_iter()
         .zip(msg_b.par_iter())
@@ -253,7 +255,7 @@ fn verify(
                 &from_bytes(params, c),
             )
             .eq(
-                &params.group.as_ref().unwrap(),
+                params.group.as_ref().unwrap(),
                 &from_bytes(params, d),
                 &mut new_big_num_context(),
             )
@@ -290,16 +292,16 @@ pub async fn reactor_base_round(
                 base_protocol_buffer.insert(msg.round, HashMap::new());
             }
             // Verify the PRF if doing blame protocol simulation.
-            if c.do_blame {
-                if !verify(
+            if c.do_blame
+                && !verify(
                     &c.base_params,
-                    &msg.blame.as_ref().unwrap(),
-                    &msg.blame_blinding.as_ref().unwrap(),
+                    msg.blame.as_ref().unwrap(),
+                    msg.blame_blinding.as_ref().unwrap(),
                     msg.e.as_ref().unwrap(),
                     &base_prf.qw.as_ref().unwrap()[msg.nid],
-                ) {
-                    warn!("Blame protocol verification failure for {}.", msg.nid);
-                }
+                )
+            {
+                warn!("Blame protocol verification failure for {}.", msg.nid);
             }
             base_protocol_buffer
                 .get_mut(&msg.round)
@@ -313,10 +315,10 @@ pub async fn reactor_base_round(
                     scaled = crate::prf::compute(&c.base_params, &base_prf.values);
                 }
                 // Solve the equation to find out the permutation.
-                let perm = solve_equation(&c, &scaled, &base_protocol_buffer.get(&round).unwrap());
+                let perm = solve_equation(c, &scaled, base_protocol_buffer.get(&round).unwrap());
                 let message = bincode::serialize(&Message::ServerBaseMessage(ServerBaseMessage {
-                    round: round,
-                    perm: perm,
+                    round,
+                    perm,
                 }))
                 .unwrap();
                 info!("Sending ServerBaseMessage, size = {}...", message.len());
@@ -369,7 +371,7 @@ pub async fn reactor_bulk_round(
                     scaled = crate::prf::compute(&c.bulk_params, &bulk_prf.values);
                 }
                 // Remove the PRF and find the message.
-                compute_message(c, &scaled, &bulk_protocol_buffer.get(&round).unwrap());
+                compute_message(c, &scaled, bulk_protocol_buffer.get(&round).unwrap());
                 if c.do_ping {
                     info!(
                         "{}",
@@ -397,7 +399,7 @@ pub async fn reactor_bulk_round(
 }
 
 // Prifi timing code below:
-
+/// PriFi main code.
 pub async fn main_prifi(c: Config) {
     let (boardcast_channels_send, boardcast_channels_recv) = unbounded::<Sender<Vec<u8>>>();
     let (reactor_input_channel_send, reactor_input_channel_recv) = unbounded::<Vec<u8>>();
@@ -409,6 +411,7 @@ pub async fn main_prifi(c: Config) {
     );
 }
 
+/// PriFi reactor.
 pub async fn reactor_prifi(
     c: &Config,
     reactor_input_channel: Receiver<Vec<u8>>,
@@ -419,7 +422,7 @@ pub async fn reactor_prifi(
         loop {
             let message = &reactor_input_channel.recv().await.unwrap();
             info!("Got message of size {}.", message.len());
-            let message: Message = bincode::deserialize(&message).unwrap();
+            let message: Message = bincode::deserialize(message).unwrap();
             match message {
                 Message::ClientPrifiMessage(msg) => {
                     base_input_channel_send.send(msg).await.unwrap();
@@ -436,6 +439,7 @@ pub async fn reactor_prifi(
     );
 }
 
+/// PriFi round handler.
 pub async fn reactor_prifi_round(
     c: &Config,
     base_input_channel: Receiver<ClientPrifiMessage>,
@@ -482,16 +486,15 @@ pub async fn reactor_prifi_round(
                     let mut xored_val = msg.slot_messages[0].clone();
                     let mut xored_prg = Integer::from(0);
                     for j in 2..c.client_size {
-                        xored_val = xored_val
-                            ^ &base_protocol_buffer
-                                .get(&round)
-                                .unwrap()
-                                .get(&j)
-                                .unwrap()
-                                .slot_messages[i];
+                        xored_val ^= &base_protocol_buffer
+                            .get(&round)
+                            .unwrap()
+                            .get(&j)
+                            .unwrap()
+                            .slot_messages[i];
                     }
-                    for k in 2..nguards {
-                        xored_prg = xored_prg ^ &prgs[k];
+                    for prg in prgs[2..nguards].iter() {
+                        xored_prg ^= prg;
                     }
                     xored_val ^= xored_prg;
                 }

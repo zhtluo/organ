@@ -1,18 +1,20 @@
 use rug::Integer;
 use std::mem::{transmute, MaybeUninit};
 
-// An implementation in flint to solve the Newton Power equation.
-
-pub fn fmpz_to_int(p: *const flint_sys::fmpz::fmpz) -> rug::Integer {
-    unsafe {
-        let mut res = rug::Integer::new();
-        let mpz_t_ptr: *mut gmp_mpfr_sys::gmp::mpz_t = res.as_raw_mut();
-        let stub_ptr: *mut flint_sys::deps::__mpz_struct = transmute(mpz_t_ptr);
-        flint_sys::fmpz::fmpz_get_mpz(stub_ptr, p);
-        res
-    }
+/// Converts `fmpz` numbers to `Integer`.
+///
+/// # Safety
+///
+/// The parameter p must be a valid pointer.
+pub unsafe fn fmpz_to_int(p: *const flint_sys::fmpz::fmpz) -> rug::Integer {
+    let mut res = rug::Integer::new();
+    let mpz_t_ptr: *mut gmp_mpfr_sys::gmp::mpz_t = res.as_raw_mut();
+    let stub_ptr: *mut flint_sys::deps::__mpz_struct = transmute(mpz_t_ptr);
+    flint_sys::fmpz::fmpz_get_mpz(stub_ptr, p);
+    res
 }
 
+/// Converts `Integer` to `fmpz` numbers.
 pub fn int_to_fmpz(i: &rug::Integer) -> flint_sys::fmpz::fmpz {
     unsafe {
         let mut out = flint_sys::fmpz::fmpz::default();
@@ -24,7 +26,8 @@ pub fn int_to_fmpz(i: &rug::Integer) -> flint_sys::fmpz::fmpz {
     }
 }
 
-pub fn solve_impl(p: &Integer, sums: &Vec<Integer>) -> Vec<Integer> {
+/// An implementation in flint to solve the Newton Power equation.
+pub fn solve_impl(p: &Integer, sums: &[Integer]) -> Vec<Integer> {
     unsafe {
         let n: i64 = sums.len() as i64;
 
@@ -54,12 +57,9 @@ pub fn solve_impl(p: &Integer, sums: &Vec<Integer>) -> Vec<Integer> {
         let mut inv;
         for i in 0..sums.len() {
             coeff[i] = sums[i].clone();
-            let mut k = 0;
-            // for j = i-1, ..., 0
-            for j in (0..i).rev() {
+            for (k, j) in (0..i).rev().enumerate() {
                 let mult = Integer::from(&coeff[k] * &sums[j]);
                 coeff[i] += mult;
-                k += 1;
             }
             inv = Integer::from(i);
             inv = -(inv + Integer::from(1));

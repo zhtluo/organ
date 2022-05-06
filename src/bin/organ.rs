@@ -6,7 +6,7 @@ use rug::Integer;
 use std::env;
 use std::fs;
 
-fn load_prf(input: &Vec<u8>) -> guard::Setup {
+fn load_prf(input: &[u8]) -> guard::Setup {
     bincode::deserialize::<guard::Setup>(input).unwrap()
 }
 
@@ -19,13 +19,18 @@ fn generate_prf(path: &str, client_size: usize, params: &config::ProtocolParams,
         .map(|i| shares.iter().map(|v| v[i].clone()).collect())
         .collect();
     let setup_values: Vec<guard::SetupValues> = (0..client_size)
-        .map(|i| guard::gen_setup_values(&params, &shares[i], do_blame))
+        .map(|i| guard::gen_setup_values(params, &shares[i], do_blame))
         .collect();
-    for i in 0..client_size {
+    for (i, value) in setup_values.iter().enumerate() {
         info!("Generating config for node {}...", i);
         std::fs::write(
-            format!("./{}/bits_{}_nid_{}.txt", path, params.bits.to_string(), i.to_string()),
-            bincode::serialize(&guard::Setup::SetupValues(setup_values[i].clone())).unwrap(),
+            format!(
+                "./{}/bits_{}_nid_{}.txt",
+                path,
+                params.bits.to_string(),
+                i.to_string()
+            ),
+            bincode::serialize(&guard::Setup::SetupValues(value.clone())).unwrap(),
         )
         .unwrap();
     }
@@ -33,7 +38,7 @@ fn generate_prf(path: &str, client_size: usize, params: &config::ProtocolParams,
     std::fs::write(
         format!("./{}/bits_{}_relay.txt", path, params.bits.to_string()),
         bincode::serialize(&guard::Setup::SetupRelay(guard::gen_setup_relay(
-            &params,
+            params,
             &setup_values,
             do_blame,
         )))
@@ -97,6 +102,5 @@ async fn main() {
         println!(r"Usage:");
         println!(r"organ (client|server) <id> <config_file> <base_prf_file> <bulk_prf_file>");
         println!(r"organ config <config_file>");
-        return;
     }
 }

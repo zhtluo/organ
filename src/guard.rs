@@ -7,32 +7,49 @@ use rug_fft::{bit_rev_radix_2_intt, bit_rev_radix_2_ntt};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
+/// Setup value of one vector.
 #[derive(Serialize, Clone, Deserialize, Default, Debug)]
 pub struct SetupVector {
+    /// Original value.
     pub value: Vec<Integer>,
+    /// Original value, processed by NTT.
     pub value_ntt: Vec<Integer>,
+    /// Value after NTT and multiplied by the hash values.
     pub product_ntt: Vec<Integer>,
+    /// Value after INTT.
     pub product: Vec<Integer>,
+    /// Value after scaling.
     pub scaled: Vec<Integer>,
+    /// Value `e` used in the blame protocol.
     pub e: Vec<Integer>,
 }
 
+/// A pair of setup values used in one round.
 #[derive(Serialize, Clone, Deserialize, Debug)]
 pub struct SetupValues {
+    /// Value of the share.
     pub share: SetupVector,
+    /// Value of the blinding vector.
     pub blinding: SetupVector,
+    /// Value `e` used in the blame protocol.
     pub e: Option<Vec<Vec<u8>>>,
 }
 
+/// Setup values of the relay.
 #[derive(Serialize, Clone, Deserialize)]
 pub struct SetupRelay {
+    /// Values used in the protocol.
     pub values: SetupValues,
+    /// Value `qw` used in the blame protocol.
     pub qw: Option<Vec<Vec<Vec<u8>>>>,
 }
 
+/// Setup values.
 #[derive(Serialize, Clone, Deserialize)]
 pub enum Setup {
+    /// Setup value of the client.
     SetupValues(SetupValues),
+    /// Setup value of the relay.
     SetupRelay(SetupRelay),
 }
 
@@ -96,11 +113,11 @@ pub fn gen_setup_vector(params: &ProtocolParams, mut shares: Vec<Integer>) -> Se
 /// Generate setup values for one full round. (base and bulk)
 pub fn gen_setup_values(
     params: &ProtocolParams,
-    shares: &Vec<Integer>,
+    shares: &[Integer],
     do_blame: bool,
 ) -> SetupValues {
-    let share = gen_setup_vector(params, shares.clone());
-    let blinding = gen_setup_vector(params, shares.clone());
+    let share = gen_setup_vector(params, Vec::from(shares));
+    let blinding = gen_setup_vector(params, Vec::from(shares));
     SetupValues {
         e: if do_blame {
             Some(
@@ -120,8 +137,8 @@ pub fn gen_setup_values(
         } else {
             None
         },
-        share: share,
-        blinding: blinding,
+        share,
+        blinding,
     }
 }
 
@@ -129,31 +146,29 @@ pub fn gen_setup_values(
 fn compute_d(
     order: &Integer,
     tau: &Integer,
-    _gamma: &Vec<Integer>,
-    omega: &Vec<Integer>,
-    omega_len: &Vec<Integer>,
-    product_ntt: &Vec<Integer>,
-    product: &Vec<Integer>,
+    _gamma: &[Integer],
+    omega: &[Integer],
+    omega_len: &[Integer],
+    product_ntt: &[Integer],
+    product: &[Integer],
 ) -> Vec<Integer> {
     assert_eq!(product_ntt.len(), product.len());
     (0..product_ntt.len())
         .into_par_iter()
         .map(|j| {
-            let val = Integer::from(
-                Integer::from(product_ntt.len()).invert(order).unwrap()
-                    * Integer::sum(
-                        (0..product_ntt.len())
-                            .into_par_iter()
-                            .map(|k| {
-                                Integer::from(
-                                    &product_ntt[k] * &omega_len[j * k / product_ntt.len()],
-                                ) * &omega[j * k % product_ntt.len()]
-                            })
-                            .collect::<Vec<_>>()
-                            .iter(),
-                    )
-                    .complete(),
-            ) - &product[j];
+            let val = (Integer::from(product_ntt.len()).invert(order).unwrap()
+                * Integer::sum(
+                    (0..product_ntt.len())
+                        .into_par_iter()
+                        .map(|k| {
+                            (&product_ntt[k] * &omega_len[j * k / product_ntt.len()]).complete()
+                                * &omega[j * k % product_ntt.len()]
+                        })
+                        .collect::<Vec<_>>()
+                        .iter(),
+                )
+                .complete())
+                - &product[j];
             assert_eq!(Integer::from(&val % order), Integer::from(0));
             val * Integer::from(order.invert_ref(tau).unwrap()) % tau
         })
@@ -163,7 +178,7 @@ fn compute_d(
 /// Generate setup values for the relay.
 pub fn gen_setup_relay(
     params: &ProtocolParams,
-    client_values: &Vec<SetupValues>,
+    client_values: &[SetupValues],
     do_blame: bool,
 ) -> SetupRelay {
     let values = gen_setup_values(params, &vec![Integer::from(1); params.vector_len], do_blame);
@@ -216,7 +231,7 @@ pub fn gen_setup_relay(
             .map(|i| {
                 compute_d(
                     &params.ring_v.order,
-                    &get_order(&params),
+                    &get_order(params),
                     &gamma_inverse,
                     &omega_inverse,
                     &omega_len_inverse,
@@ -232,7 +247,7 @@ pub fn gen_setup_relay(
             .map(|i| {
                 compute_d(
                     &params.ring_v.order,
-                    &get_order(&params),
+                    &get_order(params),
                     &gamma_inverse,
                     &omega_inverse,
                     &omega_len_inverse,
@@ -291,14 +306,12 @@ pub fn gen_setup_relay(
                                         mul(
                                             params,
                                             &ab[i][j],
-                                            &(Integer::from(
-                                                Integer::from(params.vector_len)
-                                                    .invert(&params.ring_v.order)
-                                                    .unwrap()
-                                                    * &hash_vector[j]
-                                                    * &omega_len_inverse[j * k / params.vector_len]
-                                                    * &omega_inverse[j * k % params.vector_len],
-                                            )),
+                                            &(Integer::from(params.vector_len)
+                                                .invert(&params.ring_v.order)
+                                                .unwrap()
+                                                * &hash_vector[j]
+                                                * &omega_len_inverse[j * k / params.vector_len]
+                                                * &omega_inverse[j * k % params.vector_len]),
                                         )
                                     })
                                     .reduce_with(|a, b| add(params, &a, &b))
@@ -345,15 +358,15 @@ pub fn gen_setup_relay(
             .all(|(a, b)| {
                 a.iter().zip(b.iter()).all(|(c, d)| {
                     c.eq(
-                        &params.group.as_ref().unwrap(),
-                        &d,
+                        params.group.as_ref().unwrap(),
+                        d,
                         &mut new_big_num_context(),
                     )
                     .unwrap()
                 })
             }),);
         SetupRelay {
-            values: values,
+            values,
             qw: Some(
                 qw.iter()
                     .map(|a| a.iter().map(|b| to_bytes(params, b)).collect::<Vec<_>>())
@@ -361,9 +374,6 @@ pub fn gen_setup_relay(
             ),
         }
     } else {
-        SetupRelay {
-            values: values,
-            qw: None,
-        }
+        SetupRelay { values, qw: None }
     }
 }

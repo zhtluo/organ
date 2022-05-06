@@ -5,24 +5,24 @@ use crate::net::{read_stream, write_stream};
 use rug::Integer;
 use std::net::TcpStream;
 
-/// Add randomness to generate the cipher text for the base round.
+/// Adds randomness to generate the cipher text for the base round.
 pub fn generate_client_base_message(
     c: &Config,
-    prf: &Vec<Integer>,
+    prf: &[Integer],
     message_ele: &Integer,
 ) -> Vec<Integer> {
     let mut slot_msg = Integer::from(1);
     let mut slot_messages = Vec::<Integer>::with_capacity(c.client_size);
-    for i in 0..c.client_size {
-        slot_msg = slot_msg * message_ele;
-        slot_msg = slot_msg % &c.base_params.p;
-        let msg_to_append = Integer::from(&prf[i] + 1000 * &slot_msg) % &c.base_params.q;
+    for p in prf {
+        slot_msg *= message_ele;
+        slot_msg %= &c.base_params.p;
+        let msg_to_append = Integer::from(p + 1000 * &slot_msg) % &c.base_params.q;
         slot_messages.push(msg_to_append);
     }
     slot_messages
 }
 
-/// Process and send the base round message.
+/// Processes and sends the base round message.
 fn send_client_base_message(
     c: &Config,
     nid: usize,
@@ -34,12 +34,12 @@ fn send_client_base_message(
     let mut scaled = base_prf.share.scaled.clone();
     // If we need to compute PRF on-demand...
     if c.do_unzip {
-        scaled = crate::prf::compute(&c.base_params, &base_prf);
+        scaled = crate::prf::compute(&c.base_params, base_prf);
     }
     let message = bincode::serialize(&Message::ClientBaseMessage(ClientBaseMessage {
-        round: round,
-        nid: nid,
-        slot_messages: generate_client_base_message(&c, &scaled, message_ele),
+        round,
+        nid,
+        slot_messages: generate_client_base_message(c, &scaled, message_ele),
         blame: if c.do_blame {
             Some(base_prf.share.scaled.clone())
         } else {
@@ -64,7 +64,7 @@ fn send_client_base_message(
     info!("Sent ClientBaseMessage.");
 }
 
-/// Process and send the bulk round message.
+/// Processes and sends the bulk round message.
 fn send_client_bulk_message(
     c: &Config,
     nid: usize,
@@ -76,19 +76,18 @@ fn send_client_bulk_message(
     let mut scaled = bulk_prf.share.scaled.clone();
     // If we need to compute PRF on-demand...
     if c.do_unzip {
-        scaled = crate::prf::compute(&c.bulk_params, &bulk_prf);
+        scaled = crate::prf::compute(&c.bulk_params, bulk_prf);
     }
     let slot_index_start = posid * c.slot_per_round;
     let slot_index_end = (posid + 1) * c.slot_per_round;
     let mut prf_evaluations = scaled[0..c.slot_per_round * c.client_size].to_vec();
     let message_ele = nid + 1;
-    for i in slot_index_start..slot_index_end {
-        prf_evaluations[i] =
-            (&prf_evaluations[i] + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
+    for eval in prf_evaluations[slot_index_start..slot_index_end].iter_mut() {
+        *eval = (&*eval + Integer::from(1000 * message_ele)) % &c.bulk_params.q;
     }
     let message = bincode::serialize(&Message::ClientBulkMessage(ClientBulkMessage {
-        round: round,
-        nid: nid,
+        round,
+        nid,
         slot_messages: prf_evaluations,
     }))
     .unwrap();
@@ -182,14 +181,14 @@ pub fn main_prifi(c: Config, nid: usize) {
                 .collect();
             let keys = vec![(Integer::from_str_radix("c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c5ef", 16).unwrap(), Integer::from_str_radix("c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c5ef", 16).unwrap()); c.client_size];
             let mut message_enc = message ^ &prgs[0];
-            for i in 2..nguards {
-                message_enc ^= &prgs[i];
+            for prg in prgs[2..nguards].iter() {
+                message_enc ^= prg;
             }
             let message = bincode::serialize(&Message::ClientPrifiMessage(ClientPrifiMessage {
-                round: round,
-                nid: nid,
-                slot_messages: slot_messages,
-                keys: keys,
+                round,
+                nid,
+                slot_messages,
+                keys,
                 cipher: message_enc,
             }))
             .unwrap();
