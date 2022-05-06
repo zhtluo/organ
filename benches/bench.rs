@@ -16,7 +16,7 @@ fn get_config(client_size: usize, slot: usize) -> config::Config {
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
             0,
         ),
-        client_size: client_size,
+        client_size,
         base_params: ProtocolParams {
             p: Integer::from(2).pow(64) - 59,
             q: Integer::from(2).pow(84) - 35,
@@ -68,9 +68,9 @@ fn get_setup_relay(
         .map(|i| shares.iter().map(|v| v[i].clone()).collect())
         .collect();
     let setup_values: Vec<guard::SetupValues> = (0..client_size)
-        .map(|i| guard::gen_setup_values(&params, &shares[i], false))
+        .map(|i| guard::gen_setup_values(params, &shares[i], false))
         .collect();
-    let setup_relay = guard::gen_setup_relay(&params, &setup_values, false);
+    let setup_relay = guard::gen_setup_relay(params, &setup_values, false);
 
     (setup_values, setup_relay)
 }
@@ -82,7 +82,7 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
         let (sv, sr) = get_setup_relay(*size, &c.base_params);
         let mut messages =
             std::collections::HashMap::<usize, crate::message::ClientBaseMessage>::new();
-        for i in 0..*size {
+        for (i, v) in sv.iter().enumerate() {
             messages.insert(
                 i,
                 message::ClientBaseMessage {
@@ -90,7 +90,7 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
                     nid: i,
                     slot_messages: client::generate_client_base_message(
                         &c,
-                        &sv[i].share.scaled,
+                        &v.share.scaled,
                         &Integer::from(i),
                     ),
                     blame: None,
@@ -111,7 +111,7 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
         let (sv, sr) = get_setup_relay(*size, &c.base_params);
         let mut messages =
             std::collections::HashMap::<usize, crate::message::ClientBaseMessage>::new();
-        for i in 0..*size {
+        for (i, v) in sv.iter().enumerate() {
             messages.insert(
                 i,
                 message::ClientBaseMessage {
@@ -119,7 +119,7 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
                     nid: i,
                     slot_messages: client::generate_client_base_message(
                         &c,
-                        &sv[i].share.scaled,
+                        &v.share.scaled,
                         &Integer::from(i),
                     ),
                     blame: None,
@@ -140,8 +140,12 @@ pub fn criterion_benchmark_solve_eq(cr: &mut Criterion) {
                     let txc = tx.clone();
                     let paramc = Arc::clone(&param_arc);
                     children.push(thread::spawn(move || {
-                        txc.send(server::solve_equation(&paramc.0, &paramc.1.values.share.scaled, &paramc.2))
-                            .unwrap();
+                        txc.send(server::solve_equation(
+                            &paramc.0,
+                            &paramc.1.values.share.scaled,
+                            &paramc.2,
+                        ))
+                        .unwrap();
                     }));
                 }
                 for _ in 0..NTHREADS {
