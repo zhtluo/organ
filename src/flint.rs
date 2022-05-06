@@ -103,3 +103,31 @@ pub fn solve_impl(p: &Integer, sums: &[Integer]) -> Vec<Integer> {
         messages
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::flint::solve_impl;
+    use num_traits::Pow;
+    use rug::Integer;
+    #[test]
+    fn solve_test() {
+        let n: usize = 5;
+        let modulus: Integer = Integer::from(2).pow(64) - 59;
+        let mut rand = rug::rand::RandState::new();
+        let mut vars: Vec<Integer> =
+            std::iter::repeat_with(|| Integer::from(modulus.random_below_ref(&mut rand)))
+                .take(n)
+                .collect();
+        let powers: Vec<Integer> = (1..n + 1)
+            .map(|i| {
+                vars.iter().fold(Integer::from(0), |acc, x| {
+                    acc + x.clone().pow_mod(&Integer::from(i), &modulus).unwrap()
+                })
+            })
+            .collect();
+        let mut result = solve_impl(&modulus, &powers);
+        vars.sort();
+        result.sort();
+        assert_eq!(vars, result);
+    }
+}

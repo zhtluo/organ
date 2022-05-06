@@ -184,3 +184,11 @@ The configuration `.json` files of local test `./script_local/config` or AWS net
 1. `do_unzip`: Whether or not to unzip and compute PRF values on-demand. Defaults to false.
 1. `do_delay`: Whether or not to delay before sending message. Useful in measuring optimal round trip time. Defaults to false.
 1. `do_ping`: Whether or not to simulate the real environment by performing a ping after the bulk round. Defaults to false.
+
+## Generate documentation
+
+Run
+```
+cargo doc
+```
+to generate documentation on the code.

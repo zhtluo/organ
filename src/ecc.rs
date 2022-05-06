@@ -103,3 +103,19 @@ pub fn to_scalar(x: &Integer) -> BigNum {
         bn
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::config::default_base_params;
+    use crate::ecc;
+    #[test]
+    fn convert_test() {
+        let c = default_base_params();
+        let g = ecc::get_g(&c);
+        let bytes = ecc::to_bytes(&c, &g);
+        let conv = ecc::from_bytes(&c, &bytes);
+        assert!(g
+            .eq(&c.group.unwrap(), &conv, &mut ecc::new_big_num_context())
+            .unwrap());
+    }
+}

@@ -115,7 +115,7 @@ impl NttField {
 }
 
 /// Returns default base parameters.
-fn default_base_params() -> ProtocolParams {
+pub fn default_base_params() -> ProtocolParams {
     ProtocolParams {
         p: Integer::from(2).pow(64) - 59,
         q: Integer::from(2).pow(84) - 35,
@@ -132,7 +132,7 @@ fn default_base_params() -> ProtocolParams {
 }
 
 /// Returns default bulk parameters.
-fn default_bulk_params() -> ProtocolParams {
+pub fn default_bulk_params() -> ProtocolParams {
     ProtocolParams {
         p: Integer::from(2).pow(226) - 5,
         // order of secp256k1
