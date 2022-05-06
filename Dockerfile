@@ -1,6 +1,6 @@
 FROM ubuntu:bionic
 RUN apt update
-RUN apt install build-essential libgmp-dev libmpfr-dev m4
+RUN apt install -y build-essential libgmp-dev libmpfr-dev m4
 RUN wget https://www.flintlib.org/flint-2.8.4.tar.gz
 RUN tar -xf flint-2.8.4.tar.gz
 RUN cd flint-2.8.4/
