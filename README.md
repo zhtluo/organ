@@ -5,9 +5,20 @@ The protocol follows a client/relay/server model, where the setup server provide
 
 The clients use Base round for slot selection and Bulk round to forward their messages in the chosen slots. Each client computes randomness to mask the slot messages as a polynomial ring element using a almost key-homomorphic PRF output. The relay collects all the messages from all the clients in a Base round, computes the Newton's sum equation system and solves it to obtain a random permutation of client input values. This permutation is used to select slots in the Bulk round. Clients choose a 64 bit random value for slot selection in the Base round. In the Bulk round, a client can forward 226 bits of message per allotted slot.  
 
-## Dependency installation
+## Installation
 
-### Rust
+To test out the repo, either use the package from Docker, or install all dependencies manually.
+
+### Pull from Docker
+
+```
+docker pull ghcr.io/zhtluo/organ:latest
+docker run -it ghcr.io/zhtluo/organ:latest 
+```
+
+### Manual installation
+
+#### Rust
 
 If you do not have Rust (`https://www.rust-lang.org/`) installed, you can install it via:
 
@@ -16,9 +27,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 ```
 
-### Flint
+#### Flint
 
-#### Arch Linux
+##### Arch Linux
 
 Use `pacman` to install `libflint`:
 
@@ -26,7 +37,7 @@ Use `pacman` to install `libflint`:
 sudo pacman -Sy flint --noconfirm
 ```
 
-#### Ubuntu
+##### Ubuntu
 
 Build from source with the following script snippet:
 
@@ -41,13 +52,15 @@ sudo make install
 sudo ldconfig
 ```
 
-## Local setup and test
+#### Repo
 
 - Clone the repository using `git clone https://github.com/zhtluo/organ.git`.
 
 - Change directory with `cd organ` and use `cargo build --release` to build the prototype.
 
-- Use `bash ./script_local/test.sh` to start a test-run.
+## Local setup and test
+
+Use `bash ./script_local/test.sh` to start a test-run.
 
 The default local test run launches one setup server which generates client secret shares and outputs them to `./log/local`. Then the specified number of processes (1 relay + 5 clients by default) are launched to simulate the exchange of the Base round and the Bulk round messages among them. Different configurations for different message lengths and parameters can be used to measure the performance. 
 
